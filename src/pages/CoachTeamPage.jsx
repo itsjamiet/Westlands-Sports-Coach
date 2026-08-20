@@ -226,6 +226,156 @@ function TrainingPlanEditor({ playerId }) {
   );
 }
 
+function statTotals(stats) {
+  const goalsTotal = stats.reduce((s, x) => s + (Number(x.goals) || 0), 0);
+  const savesTotal = stats.reduce((s, x) => s + (Number(x.saves) || 0), 0);
+  const tacklesTotal = stats.reduce((s, x) => s + (Number(x.tackles) || 0), 0);
+  const captainTotal = stats.filter((x) => x.captain).length;
+  const potmTotal = stats.filter((x) => x.potm).length;
+  const minutesPlayedTotal = stats.reduce((s, x) => s + (Number(x.minutes) || 0), 0);
+  const matchMinutesTotal = stats.reduce((s, x) => s + (Number(x.matchMinutes) || 0), 0);
+  const minutesPct = matchMinutesTotal > 0 ? Math.round((minutesPlayedTotal / matchMinutesTotal) * 100) : null;
+  return { goalsTotal, savesTotal, tacklesTotal, captainTotal, potmTotal, minutesPct };
+}
+
+function StatTotalsGrid({ stats }) {
+  const t = statTotals(stats);
+  const boxes = [
+    { label: "Minutes played", value: t.minutesPct === null ? "—" : `${t.minutesPct}%` },
+    { label: "Goals", value: t.goalsTotal },
+    { label: "Saves", value: t.savesTotal },
+    { label: "Tackles", value: t.tacklesTotal },
+    { label: "Captain", value: t.captainTotal },
+    { label: "Player of the match", value: t.potmTotal },
+  ];
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      {boxes.map((b) => (
+        <div key={b.label} className="glass-card p-4">
+          <div className="text-2xl font-mono">{b.value}</div>
+          <div className="text-xs" style={{ color: "var(--muted)" }}>{b.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WeeklyStatsEditor({ playerId }) {
+  const [stats, setStats] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    supabase.from("players").select("stats").eq("id", playerId).single().then(({ data }) => {
+      setStats(data?.stats || []);
+      setLoading(false);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerId]);
+
+  const persist = async (next) => {
+    setSaving(true);
+    setError("");
+    const { error } = await supabase.from("players").update({ stats: next }).eq("id", playerId);
+    setSaving(false);
+    if (error) setError(error.message);
+  };
+
+  const addWeek = () => {
+    const next = [
+      { id: uid(), date: new Date().toISOString().slice(0, 10), opponent: "", matchMinutes: 0, minutes: 0, goals: 0, tackles: 0, saves: 0, captain: false, potm: false },
+      ...stats,
+    ];
+    setStats(next);
+    persist(next);
+  };
+
+  const updateStat = (id, patch) => {
+    setStats((s) => s.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  };
+
+  const removeStat = (id) => {
+    const next = stats.filter((x) => x.id !== id);
+    setStats(next);
+    persist(next);
+  };
+
+  return (
+    <div className="glass-panel p-6 mt-6">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="font-display text-lg">Weekly stats</h2>
+        <div className="flex gap-2">
+          <button className="btn-accent px-3 py-1.5 rounded-lg text-xs" onClick={() => persist(stats)} disabled={saving}>
+            {saving ? "Saving…" : "Save stats"}
+          </button>
+          <button className="btn-ghost px-3 py-1.5 rounded-lg text-xs" onClick={addWeek}>+ Add this week</button>
+        </div>
+      </div>
+      <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
+        Visible to every parent on the team, not just this player's own parent.
+      </p>
+
+      {loading ? (
+        <p className="text-sm" style={{ color: "var(--muted)" }}>Loading…</p>
+      ) : stats.length === 0 ? (
+        <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>No stats logged yet.</p>
+      ) : (
+        <div className="flex gap-4 overflow-x-auto pb-4 mb-2">
+          {stats.map((s) => (
+            <div key={s.id} className="glass-card p-4 w-64 flex-shrink-0 relative">
+              <button className="absolute top-2 right-2 opacity-50 hover:opacity-100" onClick={() => removeStat(s.id)}>
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+              <label className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Match date</label>
+              <input type="date" className="input-dark w-full mb-2 mt-1 text-sm" value={s.date} onChange={(e) => updateStat(s.id, { date: e.target.value })} />
+              <label className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Opponent</label>
+              <input className="input-dark w-full mb-2 mt-1 text-sm" value={s.opponent} onChange={(e) => updateStat(s.id, { opponent: e.target.value })} />
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <div>
+                  <label className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Match mins</label>
+                  <input type="number" className="input-dark w-full font-mono text-sm" value={s.matchMinutes || 0} onChange={(e) => updateStat(s.id, { matchMinutes: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Mins played</label>
+                  <input type="number" className="input-dark w-full font-mono text-sm" value={s.minutes || 0} onChange={(e) => updateStat(s.id, { minutes: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Goals</label>
+                  <input type="number" className="input-dark w-full font-mono text-sm" value={s.goals || 0} onChange={(e) => updateStat(s.id, { goals: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Tackles</label>
+                  <input type="number" className="input-dark w-full font-mono text-sm" value={s.tackles || 0} onChange={(e) => updateStat(s.id, { tackles: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Saves</label>
+                  <input type="number" className="input-dark w-full font-mono text-sm" value={s.saves || 0} onChange={(e) => updateStat(s.id, { saves: e.target.value })} />
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 mt-3 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                <label className="flex items-center gap-1.5 text-xs" style={{ color: "var(--muted)" }}>
+                  <input type="checkbox" checked={!!s.captain} onChange={(e) => updateStat(s.id, { captain: e.target.checked })} />
+                  Captain
+                </label>
+                <label className="flex items-center gap-1.5 text-xs" style={{ color: "var(--muted)" }}>
+                  <input type="checkbox" checked={!!s.potm} onChange={(e) => updateStat(s.id, { potm: e.target.checked })} />
+                  Player of the match
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <h3 className="font-display text-base mb-2 mt-2">Stat totals</h3>
+      <StatTotalsGrid stats={stats} />
+
+      {error && <p className="text-sm mt-2" style={{ color: "#f28f8a" }}>{error}</p>}
+    </div>
+  );
+}
+
 function PlayerDetail({ player, onBack, onSaved, onDeleted }) {
   const [form, setForm] = useState({
     name: player.name || "",
@@ -324,6 +474,8 @@ function PlayerDetail({ player, onBack, onSaved, onDeleted }) {
       <InviteParent teamId={player.team_id} playerId={player.id} />
 
       <TrainingPlanEditor playerId={player.id} />
+
+      <WeeklyStatsEditor playerId={player.id} />
     </div>
   );
 }
