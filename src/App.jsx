@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
-import { Shield, LogOut } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
 import ClubAuth from "./pages/ClubAuth.jsx";
 import ClubDashboard from "./pages/ClubDashboard.jsx";
+import AcceptInvite from "./pages/AcceptInvite.jsx";
 
 // Shown right after a club logs in for the first time, if their signup
 // didn't get to create the club row yet (e.g. email confirmation was
 // required, so the browser tab that finally has an active session is a
 // fresh one that never ran the signup form).
-function CreateClubForm({ userId, onCreated }) {
+function CreateClubForm({ onCreated }) {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -49,7 +49,70 @@ function CreateClubForm({ userId, onCreated }) {
   );
 }
 
+// Temporary checkpoint for coach/parent accounts, until their real
+// Team/Players/Calendar pages are ported into this project.
+function TeamMemberPlaceholder({ profile, onSignOut }) {
+  const [teams, setTeams] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      if (profile.role === "coach") {
+        const { data } = await supabase
+          .from("coach_team_links")
+          .select("teams(id, name)")
+          .eq("coach_id", profile.id);
+        setTeams((data || []).map((r) => r.teams).filter(Boolean));
+      } else if (profile.role === "parent") {
+        const { data } = await supabase
+          .from("parent_child_links")
+          .select("players(id, name, teams(id, name))")
+          .eq("parent_id", profile.id);
+        const seen = new Set();
+        const list = [];
+        (data || []).forEach((r) => {
+          const t = r.players?.teams;
+          if (t && !seen.has(t.id)) {
+            seen.add(t.id);
+            list.push(t);
+          }
+        });
+        setTeams(list);
+      }
+      setLoading(false);
+    };
+    load();
+  }, [profile]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6">
+      <div className="glass-panel p-6 max-w-md w-full">
+        <h1 className="font-display text-2xl tracking-wide mb-2">You're logged in ✅</h1>
+        <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
+          Signed in as <span style={{ color: "var(--white)" }}>{profile.display_name}</span> — role{" "}
+          <span style={{ color: "var(--white)" }}>{profile.role}</span>.
+        </p>
+        {loading ? (
+          <p className="text-sm" style={{ color: "var(--muted)" }}>Loading your teams…</p>
+        ) : teams.length === 0 ? (
+          <p className="text-sm" style={{ color: "var(--muted)" }}>Not linked to any team yet.</p>
+        ) : (
+          <div className="space-y-2 mb-4">
+            {teams.map((t) => (
+              <div key={t.id} className="glass-card p-3 text-sm">{t.name}</div>
+            ))}
+          </div>
+        )}
+        <button className="btn-ghost w-full py-2 rounded-lg text-sm" onClick={onSignOut}>Log out</button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const [inviteId] = useState(() => new URLSearchParams(window.location.search).get("invite"));
+  const [inviteDone, setInviteDone] = useState(false);
+
   const [session, setSession] = useState(undefined); // undefined = not checked yet, null = logged out
   const [profile, setProfile] = useState(null);
   const [club, setClub] = useState(null);
@@ -100,6 +163,21 @@ export default function App() {
     await supabase.auth.signOut();
   };
 
+  // Invite links take priority over everything else, whether or not
+  // the person already has a session.
+  if (inviteId && !inviteDone) {
+    return (
+      <AcceptInvite
+        inviteId={inviteId}
+        session={session === undefined ? null : session}
+        onDone={() => {
+          window.history.replaceState({}, "", window.location.pathname);
+          setInviteDone(true);
+        }}
+      />
+    );
+  }
+
   if (session === undefined) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -120,8 +198,12 @@ export default function App() {
     );
   }
 
+  if (profile.role !== "club") {
+    return <TeamMemberPlaceholder profile={profile} onSignOut={handleSignOut} />;
+  }
+
   if (!profile.club_id) {
-    return <CreateClubForm userId={session.user.id} onCreated={setClub} />;
+    return <CreateClubForm onCreated={setClub} />;
   }
 
   if (!club) {
