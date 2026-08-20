@@ -101,6 +101,131 @@ function InviteParent({ teamId, playerId }) {
   );
 }
 
+const PLAN_STATUSES = [
+  { id: "needs_practice", label: "Needs practice", color: "#E8433D" },
+  { id: "improving", label: "Improving", color: "#F2A31D" },
+  { id: "mastered", label: "Mastered", color: "#1FB65A" },
+];
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function TrainingPlanEditor({ playerId }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    supabase
+      .from("training_plans")
+      .select("rows")
+      .eq("player_id", playerId)
+      .maybeSingle()
+      .then(({ data }) => {
+        setRows(data?.rows?.length ? data.rows : Array.from({ length: 5 }, () => ({ id: uid(), title: "", content: "", status: "needs_practice" })));
+        setLoading(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerId]);
+
+  const save = async (nextRows) => {
+    setSaving(true);
+    setError("");
+    const { error } = await supabase
+      .from("training_plans")
+      .upsert({ player_id: playerId, rows: nextRows }, { onConflict: "player_id" });
+    setSaving(false);
+    if (error) setError(error.message);
+  };
+
+  const updateRow = (id, patch) => {
+    const next = rows.map((r) => (r.id === id ? { ...r, ...patch } : r));
+    setRows(next);
+  };
+
+  const removeRow = (id) => {
+    const next = rows.filter((r) => r.id !== id);
+    setRows(next);
+    save(next);
+  };
+
+  const addRow = () => {
+    const next = [...rows, { id: uid(), title: "", content: "", status: "needs_practice" }];
+    setRows(next);
+  };
+
+  return (
+    <div className="glass-panel p-6 mt-6">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="font-display text-lg">Training plan</h2>
+        <button className="btn-accent px-3 py-1.5 rounded-lg text-xs" onClick={() => save(rows)} disabled={saving}>
+          {saving ? "Saving…" : "Save plan"}
+        </button>
+      </div>
+      <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
+        Only this player's own parent can see this — everything else on the team
+        stays visible to all parents.
+      </p>
+
+      {loading ? (
+        <p className="text-sm" style={{ color: "var(--muted)" }}>Loading…</p>
+      ) : (
+        <div className="space-y-3">
+          {rows.map((row) => {
+            const status = PLAN_STATUSES.find((s) => s.id === row.status) || PLAN_STATUSES[0];
+            return (
+              <div key={row.id} className="glass-card p-3 space-y-2">
+                <div className="flex items-center gap-3">
+                  <input
+                    className="input-dark flex-1 min-w-0"
+                    placeholder="Title (e.g. First touch)"
+                    value={row.title}
+                    onChange={(e) => updateRow(row.id, { title: e.target.value })}
+                  />
+                  <input
+                    className="input-dark flex-[2] min-w-0"
+                    placeholder="Details / notes"
+                    value={row.content}
+                    onChange={(e) => updateRow(row.id, { content: e.target.value })}
+                  />
+                  <button className="opacity-50 hover:opacity-100 flex-shrink-0" onClick={() => removeRow(row.id)}>
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {PLAN_STATUSES.map((s) => {
+                    const active = status.id === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        className="text-xs px-2.5 py-1 rounded-full"
+                        style={{
+                          background: active ? s.color : "rgba(255,255,255,0.06)",
+                          color: active ? "#0b1223" : "var(--muted)",
+                          fontWeight: active ? 700 : 400,
+                        }}
+                        onClick={() => updateRow(row.id, { status: s.id })}
+                      >
+                        {s.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          <button className="btn-ghost w-full py-2 rounded-lg text-sm" onClick={addRow}>
+            + Add row
+          </button>
+        </div>
+      )}
+      {error && <p className="text-sm mt-2" style={{ color: "#f28f8a" }}>{error}</p>}
+    </div>
+  );
+}
+
 function PlayerDetail({ player, onBack, onSaved, onDeleted }) {
   const [form, setForm] = useState({
     name: player.name || "",
@@ -198,9 +323,7 @@ function PlayerDetail({ player, onBack, onSaved, onDeleted }) {
 
       <InviteParent teamId={player.team_id} playerId={player.id} />
 
-      <p className="text-xs mt-6" style={{ color: "var(--muted)" }}>
-        Weekly stats and training plans get added here in the next step.
-      </p>
+      <TrainingPlanEditor playerId={player.id} />
     </div>
   );
 }
