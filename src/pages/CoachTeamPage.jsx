@@ -47,6 +47,60 @@ function PlayerCard({ player, onOpen }) {
   );
 }
 
+function InviteParent({ teamId, playerId }) {
+  const [link, setLink] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const generateInvite = async () => {
+    setLoading(true);
+    setError("");
+    setCopied(false);
+    const { data: userData } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from("invites")
+      .insert({ team_id: teamId, role: "parent", player_id: playerId, created_by: userData.user.id })
+      .select()
+      .single();
+    setLoading(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setLink(`${window.location.origin}${window.location.pathname}?invite=${data.id}`);
+  };
+
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="glass-panel p-6 mt-6">
+      <h2 className="font-display text-lg mb-1">Parents</h2>
+      <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
+        Generate a link for this player's parent — they'll be linked to this
+        child specifically, not the whole team.
+      </p>
+      {!link ? (
+        <button className="btn-accent px-4 py-2 rounded-lg text-sm" onClick={generateInvite} disabled={loading}>
+          {loading ? "Generating…" : "Generate parent invite link"}
+        </button>
+      ) : (
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input className="input-dark flex-1 font-mono text-xs" value={link} readOnly onFocus={(e) => e.target.select()} />
+          <button className="btn-ghost px-4 py-2 rounded-lg text-sm flex-shrink-0" onClick={copyLink}>
+            {copied ? "Copied!" : "Copy link"}
+          </button>
+        </div>
+      )}
+      {error && <p className="text-sm mt-2" style={{ color: "#f28f8a" }}>{error}</p>}
+    </div>
+  );
+}
+
 function PlayerDetail({ player, onBack, onSaved, onDeleted }) {
   const [form, setForm] = useState({
     name: player.name || "",
@@ -141,6 +195,8 @@ function PlayerDetail({ player, onBack, onSaved, onDeleted }) {
           <Trash2 className="w-4 h-4" /> Remove player
         </button>
       </div>
+
+      <InviteParent teamId={player.team_id} playerId={player.id} />
 
       <p className="text-xs mt-6" style={{ color: "var(--muted)" }}>
         Weekly stats and training plans get added here in the next step.
