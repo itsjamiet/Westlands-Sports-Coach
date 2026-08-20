@@ -52,37 +52,19 @@ function CreateClubForm({ onCreated }) {
 
 // Temporary checkpoint for coach/parent accounts, until their real
 // Team/Players/Calendar pages are ported into this project.
-function TeamMemberPlaceholder({ profile, onSignOut }) {
-  const [teams, setTeams] = useState([]);
+function ParentPlaceholder({ profile, onSignOut }) {
+  const [children, setChildren] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
-      if (profile.role === "coach") {
-        const { data } = await supabase
-          .from("coach_team_links")
-          .select("teams(id, name)")
-          .eq("coach_id", profile.id);
-        setTeams((data || []).map((r) => r.teams).filter(Boolean));
-      } else if (profile.role === "parent") {
-        const { data } = await supabase
-          .from("parent_child_links")
-          .select("players(id, name, teams(id, name))")
-          .eq("parent_id", profile.id);
-        const seen = new Set();
-        const list = [];
-        (data || []).forEach((r) => {
-          const t = r.players?.teams;
-          if (t && !seen.has(t.id)) {
-            seen.add(t.id);
-            list.push(t);
-          }
-        });
-        setTeams(list);
-      }
-      setLoading(false);
-    };
-    load();
+    supabase
+      .from("parent_child_links")
+      .select("players(id, name, position, teams(id, name))")
+      .eq("parent_id", profile.id)
+      .then(({ data }) => {
+        setChildren((data || []).map((r) => r.players).filter(Boolean));
+        setLoading(false);
+      });
   }, [profile]);
 
   return (
@@ -94,13 +76,16 @@ function TeamMemberPlaceholder({ profile, onSignOut }) {
           <span style={{ color: "var(--white)" }}>{profile.role}</span>.
         </p>
         {loading ? (
-          <p className="text-sm" style={{ color: "var(--muted)" }}>Loading your teams…</p>
-        ) : teams.length === 0 ? (
-          <p className="text-sm" style={{ color: "var(--muted)" }}>Not linked to any team yet.</p>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>Loading…</p>
+        ) : children.length === 0 ? (
+          <p className="text-sm" style={{ color: "var(--muted)" }}>Not linked to any child yet.</p>
         ) : (
           <div className="space-y-2 mb-4">
-            {teams.map((t) => (
-              <div key={t.id} className="glass-card p-3 text-sm">{t.name}</div>
+            {children.map((c) => (
+              <div key={c.id} className="glass-card p-3 text-sm">
+                <div className="font-medium">{c.name || "Unnamed player"}</div>
+                <div style={{ color: "var(--muted)" }}>{c.teams?.name} · {c.position}</div>
+              </div>
             ))}
           </div>
         )}
@@ -204,7 +189,7 @@ export default function App() {
   }
 
   if (profile.role === "parent") {
-    return <TeamMemberPlaceholder profile={profile} onSignOut={handleSignOut} />;
+    return <ParentPlaceholder profile={profile} onSignOut={handleSignOut} />;
   }
 
   if (!profile.club_id) {
