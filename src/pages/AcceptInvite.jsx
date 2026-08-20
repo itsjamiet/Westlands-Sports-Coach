@@ -104,7 +104,11 @@ export default function AcceptInvite({ inviteId, session, onDone }) {
         <div className="glass-panel p-6 max-w-sm text-center">
           <h1 className="font-display text-xl tracking-wide mb-2">You're in ✅</h1>
           <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
-            You've joined <span style={{ color: "var(--white)" }}>{info.team_name}</span> as {info.role}.
+            You've joined <span style={{ color: "var(--white)" }}>{info.team_name}</span> as {info.role}
+            {info.role === "parent" && info.player_name ? (
+              <> of <span style={{ color: "var(--white)" }}>{info.player_name}</span></>
+            ) : null}
+            .
           </p>
           <button className="btn-accent w-full py-3 rounded-lg" onClick={onDone}>Continue</button>
         </div>
@@ -131,7 +135,8 @@ export default function AcceptInvite({ inviteId, session, onDone }) {
             Join <span style={{ color: "var(--accent)" }}>{info.team_name}</span>
           </h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            You've been invited as a {info.role}. Create your account to join.
+            You've been invited as a {info.role}
+            {info.role === "parent" && info.player_name ? ` of ${info.player_name}` : ""}. Create your account to join.
           </p>
         </div>
 
