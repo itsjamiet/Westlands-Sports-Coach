@@ -4,6 +4,7 @@ import ClubAuth from "./pages/ClubAuth.jsx";
 import ClubDashboard from "./pages/ClubDashboard.jsx";
 import AcceptInvite from "./pages/AcceptInvite.jsx";
 import CoachTeamPage from "./pages/CoachTeamPage.jsx";
+import ParentDashboard from "./pages/ParentDashboard.jsx";
 
 // Shown right after a club logs in for the first time, if their signup
 // didn't get to create the club row yet (e.g. email confirmation was
@@ -45,51 +46,6 @@ function CreateClubForm({ onCreated }) {
             {loading ? "Creating…" : "Create club"}
           </button>
         </form>
-      </div>
-    </div>
-  );
-}
-
-// Temporary checkpoint for coach/parent accounts, until their real
-// Team/Players/Calendar pages are ported into this project.
-function ParentPlaceholder({ profile, onSignOut }) {
-  const [children, setChildren] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    supabase
-      .from("parent_child_links")
-      .select("players(id, name, position, teams(id, name))")
-      .eq("parent_id", profile.id)
-      .then(({ data }) => {
-        setChildren((data || []).map((r) => r.players).filter(Boolean));
-        setLoading(false);
-      });
-  }, [profile]);
-
-  return (
-    <div className="min-h-screen flex items-center justify-center p-6">
-      <div className="glass-panel p-6 max-w-md w-full">
-        <h1 className="font-display text-2xl tracking-wide mb-2">You're logged in ✅</h1>
-        <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
-          Signed in as <span style={{ color: "var(--white)" }}>{profile.display_name}</span> — role{" "}
-          <span style={{ color: "var(--white)" }}>{profile.role}</span>.
-        </p>
-        {loading ? (
-          <p className="text-sm" style={{ color: "var(--muted)" }}>Loading…</p>
-        ) : children.length === 0 ? (
-          <p className="text-sm" style={{ color: "var(--muted)" }}>Not linked to any child yet.</p>
-        ) : (
-          <div className="space-y-2 mb-4">
-            {children.map((c) => (
-              <div key={c.id} className="glass-card p-3 text-sm">
-                <div className="font-medium">{c.name || "Unnamed player"}</div>
-                <div style={{ color: "var(--muted)" }}>{c.teams?.name} · {c.position}</div>
-              </div>
-            ))}
-          </div>
-        )}
-        <button className="btn-ghost w-full py-2 rounded-lg text-sm" onClick={onSignOut}>Log out</button>
       </div>
     </div>
   );
@@ -189,7 +145,7 @@ export default function App() {
   }
 
   if (profile.role === "parent") {
-    return <ParentPlaceholder profile={profile} onSignOut={handleSignOut} />;
+    return <ParentDashboard profile={profile} onSignOut={handleSignOut} />;
   }
 
   if (!profile.club_id) {
