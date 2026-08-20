@@ -83,6 +83,64 @@ function ReadOnlyTrainingPlan({ playerId }) {
   );
 }
 
+function statTotals(stats) {
+  const goalsTotal = stats.reduce((s, x) => s + (Number(x.goals) || 0), 0);
+  const savesTotal = stats.reduce((s, x) => s + (Number(x.saves) || 0), 0);
+  const tacklesTotal = stats.reduce((s, x) => s + (Number(x.tackles) || 0), 0);
+  const captainTotal = stats.filter((x) => x.captain).length;
+  const potmTotal = stats.filter((x) => x.potm).length;
+  const minutesPlayedTotal = stats.reduce((s, x) => s + (Number(x.minutes) || 0), 0);
+  const matchMinutesTotal = stats.reduce((s, x) => s + (Number(x.matchMinutes) || 0), 0);
+  const minutesPct = matchMinutesTotal > 0 ? Math.round((minutesPlayedTotal / matchMinutesTotal) * 100) : null;
+  return { goalsTotal, savesTotal, tacklesTotal, captainTotal, potmTotal, minutesPct };
+}
+
+function ReadOnlyWeeklyStats({ stats }) {
+  if (!stats || stats.length === 0) {
+    return <p className="text-sm" style={{ color: "var(--muted)" }}>No stats logged yet.</p>;
+  }
+  const t = statTotals(stats);
+  const boxes = [
+    { label: "Minutes played", value: t.minutesPct === null ? "—" : `${t.minutesPct}%` },
+    { label: "Goals", value: t.goalsTotal },
+    { label: "Saves", value: t.savesTotal },
+    { label: "Tackles", value: t.tacklesTotal },
+    { label: "Captain", value: t.captainTotal },
+    { label: "Player of the match", value: t.potmTotal },
+  ];
+  return (
+    <>
+      <div className="flex gap-4 overflow-x-auto pb-4 mb-4">
+        {stats.map((s) => (
+          <div key={s.id} className="glass-card p-4 w-56 flex-shrink-0">
+            <div className="text-xs" style={{ color: "var(--muted)" }}>{s.date}{s.opponent ? ` · vs ${s.opponent}` : ""}</div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-2 text-sm">
+              <div>Mins: <span className="font-mono">{s.minutes || 0}/{s.matchMinutes || 0}</span></div>
+              <div>Goals: <span className="font-mono">{s.goals || 0}</span></div>
+              <div>Tackles: <span className="font-mono">{s.tackles || 0}</span></div>
+              <div>Saves: <span className="font-mono">{s.saves || 0}</span></div>
+            </div>
+            {(s.captain || s.potm) && (
+              <div className="flex gap-1.5 mt-2">
+                {s.captain && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>Captain</span>}
+                {s.potm && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(212,175,55,0.18)", color: "#f1d97a" }}>POTM</span>}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {boxes.map((b) => (
+          <div key={b.label} className="glass-card p-4">
+            <div className="text-2xl font-mono">{b.value}</div>
+            <div className="text-xs" style={{ color: "var(--muted)" }}>{b.label}</div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 function PlayerView({ player, isOwnChild, onBack }) {
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
@@ -120,6 +178,12 @@ function PlayerView({ player, isOwnChild, onBack }) {
           <div className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Position</div>
           <div className="text-lg mt-1">{player.position}</div>
         </div>
+      </div>
+
+      <div className="glass-panel p-6 mb-6">
+        <h2 className="font-display text-lg mb-1">Weekly stats</h2>
+        <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>Visible to every parent on the team.</p>
+        <ReadOnlyWeeklyStats stats={player.stats} />
       </div>
 
       {isOwnChild && (
