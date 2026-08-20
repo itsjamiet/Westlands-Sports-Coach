@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Shield, LogOut } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
 import ClubAuth from "./pages/ClubAuth.jsx";
+import ClubDashboard from "./pages/ClubDashboard.jsx";
 
 // Shown right after a club logs in for the first time, if their signup
 // didn't get to create the club row yet (e.g. email confirmation was
@@ -16,25 +17,13 @@ function CreateClubForm({ userId, onCreated }) {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const { data: club, error: clubError } = await supabase
-      .from("clubs")
-      .insert({ name: name || "My Club", owner_id: userId })
-      .select()
-      .single();
+    const { data: club, error: clubError } = await supabase.rpc("create_my_club", { club_name: name });
     if (clubError) {
       setError(clubError.message);
       setLoading(false);
       return;
     }
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .update({ club_id: club.id })
-      .eq("id", userId);
     setLoading(false);
-    if (profileError) {
-      setError(profileError.message);
-      return;
-    }
     onCreated(club);
   };
 
@@ -55,37 +44,6 @@ function CreateClubForm({ userId, onCreated }) {
             {loading ? "Creating…" : "Create club"}
           </button>
         </form>
-      </div>
-    </div>
-  );
-}
-
-function ClubDashboardPlaceholder({ profile, club, onSignOut }) {
-  return (
-    <div className="min-h-screen">
-      <div className="navbar-gloss flex items-center justify-between px-6 h-16" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-        <div className="flex items-center gap-2">
-          <Shield className="w-5 h-5" style={{ color: "var(--accent)" }} />
-          <span className="font-display text-lg tracking-wide">{club.name}</span>
-        </div>
-        <button className="btn-ghost p-2 rounded-lg" onClick={onSignOut} title="Log out">
-          <LogOut className="w-4 h-4" />
-        </button>
-      </div>
-      <div className="max-w-3xl mx-auto px-4 py-10">
-        <div className="glass-panel p-6">
-          <h1 className="font-display text-2xl tracking-wide mb-2">You're logged in ✅</h1>
-          <p className="text-sm" style={{ color: "var(--muted)" }}>
-            Signed in as <span style={{ color: "var(--white)" }}>{profile.display_name}</span> — role{" "}
-            <span style={{ color: "var(--white)" }}>{profile.role}</span> — club{" "}
-            <span style={{ color: "var(--white)" }}>{club.name}</span>.
-          </p>
-          <p className="text-sm mt-3" style={{ color: "var(--muted)" }}>
-            This is the Phase 1 checkpoint: real authentication is working end to end.
-            The full Teams / Players / Calendar / Training Plans pages get ported into
-            this project next.
-          </p>
-        </div>
       </div>
     </div>
   );
@@ -174,5 +132,5 @@ export default function App() {
     );
   }
 
-  return <ClubDashboardPlaceholder profile={profile} club={club} onSignOut={handleSignOut} />;
+  return <ClubDashboard profile={profile} club={club} onSignOut={handleSignOut} />;
 }
