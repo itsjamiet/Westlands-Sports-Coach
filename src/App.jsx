@@ -3,6 +3,7 @@ import { supabase } from "./lib/supabaseClient.js";
 import ClubAuth from "./pages/ClubAuth.jsx";
 import ClubDashboard from "./pages/ClubDashboard.jsx";
 import AcceptInvite from "./pages/AcceptInvite.jsx";
+import CoachTeamPage from "./pages/CoachTeamPage.jsx";
 
 // Shown right after a club logs in for the first time, if their signup
 // didn't get to create the club row yet (e.g. email confirmation was
@@ -198,7 +199,11 @@ export default function App() {
     );
   }
 
-  if (profile.role !== "club") {
+  if (profile.role === "coach") {
+    return <CoachTeamPage profile={profile} onSignOut={handleSignOut} />;
+  }
+
+  if (profile.role === "parent") {
     return <TeamMemberPlaceholder profile={profile} onSignOut={handleSignOut} />;
   }
 
