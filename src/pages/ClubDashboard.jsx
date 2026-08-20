@@ -20,6 +20,59 @@ function TeamCard({ team, onOpen }) {
   );
 }
 
+function InviteCoach({ teamId }) {
+  const [link, setLink] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const generateInvite = async () => {
+    setLoading(true);
+    setError("");
+    setCopied(false);
+    const { data, error } = await supabase
+      .from("invites")
+      .insert({ team_id: teamId, role: "coach", created_by: (await supabase.auth.getUser()).data.user.id })
+      .select()
+      .single();
+    setLoading(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setLink(`${window.location.origin}${window.location.pathname}?invite=${data.id}`);
+  };
+
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="glass-panel p-6 mb-6">
+      <h2 className="font-display text-lg mb-1">Coaches</h2>
+      <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
+        Generate a link and send it to a coach — opening it lets them create their
+        account and joins them to this team automatically.
+      </p>
+      {!link ? (
+        <button className="btn-accent px-4 py-2 rounded-lg text-sm" onClick={generateInvite} disabled={loading}>
+          {loading ? "Generating…" : "Generate invite link"}
+        </button>
+      ) : (
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input className="input-dark flex-1 font-mono text-xs" value={link} readOnly onFocus={(e) => e.target.select()} />
+          <button className="btn-ghost px-4 py-2 rounded-lg text-sm flex-shrink-0" onClick={copyLink}>
+            {copied ? "Copied!" : "Copy link"}
+          </button>
+        </div>
+      )}
+      {error && <p className="text-sm mt-2" style={{ color: "#f28f8a" }}>{error}</p>}
+    </div>
+  );
+}
+
 function TeamDetail({ team, onBack, onDeleted, onRenamed }) {
   const [name, setName] = useState(team.name);
   const [saving, setSaving] = useState(false);
@@ -65,12 +118,7 @@ function TeamDetail({ team, onBack, onDeleted, onRenamed }) {
         </div>
       </div>
 
-      <div className="glass-panel p-6 mb-6">
-        <h2 className="font-display text-lg mb-1">Coaches</h2>
-        <p className="text-sm" style={{ color: "var(--muted)" }}>
-          Coach invites are coming in the next step — this is where you'll add coaches to this team.
-        </p>
-      </div>
+      <InviteCoach teamId={team.id} />
 
       <button className="btn-ghost px-4 py-2 rounded-lg text-sm flex items-center gap-2" onClick={deleteTeam}>
         <Trash2 className="w-4 h-4" /> Remove team
