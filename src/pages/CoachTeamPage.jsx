@@ -3,6 +3,7 @@ import { Shield, LogOut, Plus, Users, ArrowLeft, Camera, Trash2 } from "lucide-r
 import { supabase } from "../lib/supabaseClient.js";
 import MatchDayView from "./MatchDay.jsx";
 import DocumentsView from "./Documents.jsx";
+import TrainingSessionView from "./TrainingSession.jsx";
 
 const POSITIONS = ["GK", "RB", "CB", "LB", "RM", "CM", "LM", "RW", "ST", "LW"];
 
@@ -475,8 +476,6 @@ function PlayerDetail({ player, onBack, onSaved, onDeleted }) {
 
       <InviteParent teamId={player.team_id} playerId={player.id} />
 
-      <TrainingPlanEditor playerId={player.id} />
-
       <WeeklyStatsEditor playerId={player.id} />
     </div>
   );
@@ -790,6 +789,55 @@ function TeamCalendar({ team, editable, ownChildIds }) {
   );
 }
 
+function TrainingPlansTab({ team }) {
+  const [players, setPlayers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [openPlayer, setOpenPlayer] = useState(null);
+
+  useEffect(() => {
+    supabase.from("players").select("*").eq("team_id", team.id).then(({ data }) => {
+      setPlayers(data || []);
+      setLoading(false);
+    });
+  }, [team.id]);
+
+  if (openPlayer) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-8">
+        <button className="text-sm flex items-center gap-1 mb-6" style={{ color: "var(--muted)" }} onClick={() => setOpenPlayer(null)}>
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to training plans
+        </button>
+        <h1 className="font-display text-2xl tracking-wide mb-6">{openPlayer.name || "Unnamed player"}</h1>
+        <TrainingPlanEditor playerId={openPlayer.id} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-8">
+      <h1 className="font-display text-2xl tracking-wide mb-6">Training Plans</h1>
+      {loading ? (
+        <p style={{ color: "var(--muted)" }}>Loading…</p>
+      ) : players.length === 0 ? (
+        <div className="glass-panel p-10 text-center" style={{ color: "var(--muted)" }}>No players yet.</div>
+      ) : (
+        <div className="space-y-2">
+          {sortByNumber(players).map((p) => (
+            <button key={p.id} className="glass-card w-full flex items-center gap-3 p-3 text-left" onClick={() => setOpenPlayer(p)}>
+              <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border-2" style={{ borderColor: "var(--accent)" }}>
+                {p.photo_url ? <img src={p.photo_url} alt={p.name} className="w-full h-full object-cover" /> :
+                  <Users className="w-4 h-4" style={{ color: "var(--muted)" }} />}
+              </div>
+              <span className="flex-1 font-medium">{p.name || "Unnamed player"}</span>
+              <span className="text-xs font-mono" style={{ color: "var(--muted)" }}>#{p.number || "—"}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CoachTeamPage({ profile, onSignOut }) {
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -885,6 +933,18 @@ export default function CoachTeamPage({ profile, onSignOut }) {
             Match Day
           </button>
           <button
+            className={activeTab === "plans" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
+            onClick={() => setActiveTab("plans")}
+          >
+            Training Plans
+          </button>
+          <button
+            className={activeTab === "session" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
+            onClick={() => setActiveTab("session")}
+          >
+            Training Session
+          </button>
+          <button
             className={activeTab === "documents" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
             onClick={() => setActiveTab("documents")}
           >
@@ -904,6 +964,10 @@ export default function CoachTeamPage({ profile, onSignOut }) {
         activeTeam && <TeamCalendar team={activeTeam} editable={true} />
       ) : activeTab === "matchday" ? (
         activeTeam && <MatchDayView team={activeTeam} editable={true} />
+      ) : activeTab === "plans" ? (
+        activeTeam && <TrainingPlansTab team={activeTeam} />
+      ) : activeTab === "session" ? (
+        activeTeam && <TrainingSessionView team={activeTeam} editable={true} />
       ) : activeTab === "documents" ? (
         activeTeam && <DocumentsView team={activeTeam} editable={true} />
       ) : (
