@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Shield, LogOut, Plus, Users, ArrowLeft, Camera, Trash2 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient.js";
+import MatchDayView from "./MatchDay.jsx";
+import DocumentsView from "./Documents.jsx";
 
 const POSITIONS = ["GK", "RB", "CB", "LB", "RM", "CM", "LM", "RW", "ST", "LW"];
 
@@ -876,6 +878,18 @@ export default function CoachTeamPage({ profile, onSignOut }) {
           >
             Calendar
           </button>
+          <button
+            className={activeTab === "matchday" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
+            onClick={() => setActiveTab("matchday")}
+          >
+            Match Day
+          </button>
+          <button
+            className={activeTab === "documents" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
+            onClick={() => setActiveTab("documents")}
+          >
+            Documents
+          </button>
         </div>
       )}
 
@@ -888,6 +902,10 @@ export default function CoachTeamPage({ profile, onSignOut }) {
         />
       ) : activeTab === "calendar" ? (
         activeTeam && <TeamCalendar team={activeTeam} editable={true} />
+      ) : activeTab === "matchday" ? (
+        activeTeam && <MatchDayView team={activeTeam} editable={true} />
+      ) : activeTab === "documents" ? (
+        activeTeam && <DocumentsView team={activeTeam} editable={true} />
       ) : (
         activeTeam && <TeamRoster team={activeTeam} onOpenPlayer={handleOpenPlayer} />
       )}
