@@ -5,6 +5,7 @@ import MatchDayView from "./MatchDay.jsx";
 import DocumentsView from "./Documents.jsx";
 import TrainingSessionView, { Quadrant, TOOLS, defaultPitch } from "./TrainingSession.jsx";
 import ClubCalendarTab from "./ClubCalendar.jsx";
+import DropdownMenu, { DropdownItem } from "../components/DropdownMenu.jsx";
 
 const POSITIONS = ["GK", "RB", "CB", "LB", "RM", "CM", "LM", "RW", "ST", "LW"];
 
@@ -494,6 +495,7 @@ function PlayerDetail({ player, onBack, onSaved, onDeleted }) {
   const [photoUrl, setPhotoUrl] = useState(player.photo_url || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [showInviteParent, setShowInviteParent] = useState(false);
 
   const handlePhoto = async (e) => {
     const file = e.target.files?.[0];
@@ -529,9 +531,23 @@ function PlayerDetail({ player, onBack, onSaved, onDeleted }) {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <button className="text-sm flex items-center gap-1 mb-6" style={{ color: "var(--muted)" }} onClick={onBack}>
-        <ArrowLeft className="w-3.5 h-3.5" /> Back to team
-      </button>
+      <div className="flex items-center justify-between mb-6">
+        <button className="text-sm flex items-center gap-1" style={{ color: "var(--muted)" }} onClick={onBack}>
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to team
+        </button>
+        <DropdownMenu>
+          {({ close }) => (
+            <>
+              <DropdownItem onClick={() => { setShowInviteParent((v) => !v); close(); }}>
+                {showInviteParent ? "Hide parent invite" : "Invite parent"}
+              </DropdownItem>
+              <DropdownItem onClick={() => { close(); remove(); }}>
+                Remove player
+              </DropdownItem>
+            </>
+          )}
+        </DropdownMenu>
+      </div>
 
       {error && <p className="text-sm mb-4" style={{ color: "#f28f8a" }}>{error}</p>}
 
@@ -574,12 +590,9 @@ function PlayerDetail({ player, onBack, onSaved, onDeleted }) {
         <button className="btn-accent px-5 py-2.5 rounded-lg" onClick={save} disabled={saving}>
           {saving ? "Saving…" : "Save"}
         </button>
-        <button className="btn-ghost px-4 py-2.5 rounded-lg flex items-center gap-2" onClick={remove}>
-          <Trash2 className="w-4 h-4" /> Remove player
-        </button>
       </div>
 
-      <InviteParent teamId={player.team_id} playerId={player.id} />
+      {showInviteParent && <InviteParent teamId={player.team_id} playerId={player.id} />}
 
       <WeeklyStatsEditor playerId={player.id} />
     </div>
