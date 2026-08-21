@@ -271,4 +271,3 @@ export default function TrainingSessionView({ team, editable }) {
     </div>
   );
 }
-
