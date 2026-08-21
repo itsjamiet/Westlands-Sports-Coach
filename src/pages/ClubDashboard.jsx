@@ -31,6 +31,59 @@ function TeamCard({ team, onOpen }) {
   );
 }
 
+function InviteClubAdmin({ clubId }) {
+  const [link, setLink] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const generateInvite = async () => {
+    setLoading(true);
+    setError("");
+    setCopied(false);
+    const { data, error } = await supabase
+      .from("invites")
+      .insert({ club_id: clubId, role: "club", created_by: (await supabase.auth.getUser()).data.user.id })
+      .select()
+      .single();
+    setLoading(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setLink(`${window.location.origin}${window.location.pathname}?invite=${data.id}`);
+  };
+
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="glass-panel p-6 mb-6">
+      <h2 className="font-display text-lg mb-1">Club admins</h2>
+      <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
+        Generate a link to give someone else full club access — teams, calendar,
+        documents, everything you can see.
+      </p>
+      {!link ? (
+        <button className="btn-accent px-4 py-2 rounded-lg text-sm" onClick={generateInvite} disabled={loading}>
+          {loading ? "Generating…" : "Generate admin invite link"}
+        </button>
+      ) : (
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input className="input-dark flex-1 font-mono text-xs" value={link} readOnly onFocus={(e) => e.target.select()} />
+          <button className="btn-ghost px-4 py-2 rounded-lg text-sm flex-shrink-0" onClick={copyLink}>
+            {copied ? "Copied!" : "Copy link"}
+          </button>
+        </div>
+      )}
+      {error && <p className="text-sm mt-2" style={{ color: "#f28f8a" }}>{error}</p>}
+    </div>
+  );
+}
+
 function InviteCoach({ teamId }) {
   const [link, setLink] = useState("");
   const [loading, setLoading] = useState(false);
@@ -542,6 +595,8 @@ export default function ClubDashboard({ profile, club, onSignOut }) {
       ) : (
       <div className="max-w-5xl mx-auto px-4 py-8">
         <h1 className="font-display text-2xl tracking-wide mb-6">Teams</h1>
+
+        <InviteClubAdmin clubId={club.id} />
 
         {error && <p className="text-sm mb-4" style={{ color: "#f28f8a" }}>{error}</p>}
 
