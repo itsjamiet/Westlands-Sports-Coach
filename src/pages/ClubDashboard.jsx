@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Shield, LogOut, Plus, Users, Trash2, ArrowLeft, Upload, FileText } from "lucide-react";
+import { Shield, LogOut, Plus, Users, Trash2, ArrowLeft, Upload, FileText, Palette } from "lucide-react";
 import { supabase } from "../lib/supabaseClient.js";
 import { Quadrant } from "./TrainingSession.jsx";
 import ClubCalendarTab from "./ClubCalendar.jsx";
+import DropdownMenu, { DropdownItem } from "../components/DropdownMenu.jsx";
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -328,6 +329,7 @@ function TeamDetail({ team, onBack, onDeleted, onRenamed }) {
   const [players, setPlayers] = useState([]);
   const [playersLoading, setPlayersLoading] = useState(true);
   const [openPlayer, setOpenPlayer] = useState(null);
+  const [showInviteCoach, setShowInviteCoach] = useState(false);
 
   useEffect(() => {
     supabase.from("players").select("*").eq("team_id", team.id).then(({ data }) => {
@@ -364,9 +366,23 @@ function TeamDetail({ team, onBack, onDeleted, onRenamed }) {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
-      <button className="text-sm flex items-center gap-1 mb-6" style={{ color: "var(--muted)" }} onClick={onBack}>
-        <ArrowLeft className="w-3.5 h-3.5" /> Back to teams
-      </button>
+      <div className="flex items-center justify-between mb-6">
+        <button className="text-sm flex items-center gap-1" style={{ color: "var(--muted)" }} onClick={onBack}>
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to teams
+        </button>
+        <DropdownMenu>
+          {({ close }) => (
+            <>
+              <DropdownItem onClick={() => { setShowInviteCoach((v) => !v); close(); }}>
+                {showInviteCoach ? "Hide coach invite" : "Invite a coach"}
+              </DropdownItem>
+              <DropdownItem onClick={() => { close(); deleteTeam(); }}>
+                Remove team
+              </DropdownItem>
+            </>
+          )}
+        </DropdownMenu>
+      </div>
 
       {error && <p className="text-sm mb-4" style={{ color: "#f28f8a" }}>{error}</p>}
 
@@ -380,7 +396,7 @@ function TeamDetail({ team, onBack, onDeleted, onRenamed }) {
         </div>
       </div>
 
-      <InviteCoach teamId={team.id} />
+      {showInviteCoach && <InviteCoach teamId={team.id} />}
 
       <div className="mb-6">
         <h2 className="font-display text-lg mb-3">Players</h2>
@@ -397,10 +413,6 @@ function TeamDetail({ team, onBack, onDeleted, onRenamed }) {
           </div>
         )}
       </div>
-
-      <button className="btn-ghost px-4 py-2 rounded-lg text-sm flex items-center gap-2" onClick={deleteTeam}>
-        <Trash2 className="w-4 h-4" /> Remove team
-      </button>
     </div>
   );
 }
@@ -504,12 +516,120 @@ function ClubDocumentsTab({ club }) {
   );
 }
 
+const FULL_PRESET_THEMES = [
+  { name: "Matchday Navy", accent: "#2E7CF6", dark: "#123a8a", bg: "#060b16", panel: "#0f1e3d", panel2: "#16295a" },
+  { name: "Pitch Emerald", accent: "#1FB65A", dark: "#0c5c2b", bg: "#04140b", panel: "#0c2818", panel2: "#123822" },
+  { name: "Kit Crimson", accent: "#E8433D", dark: "#7c1712", bg: "#160606", panel: "#2a0e0e", panel2: "#3a1414" },
+  { name: "Amber Kit", accent: "#F2A31D", dark: "#8a5804", bg: "#160f02", panel: "#2a1e08", panel2: "#3a2a0c" },
+  { name: "Royal Purple", accent: "#8A5CF6", dark: "#3d1f8f", bg: "#0c0620", panel: "#1a1038", panel2: "#241650" },
+];
+
+function ThemeInjector({ theme }) {
+  if (!theme) return null;
+  return (
+    <style>{`:root{
+      --accent:${theme.accent || "#2E7CF6"};
+      --accent-dark:${theme.dark || "#123a8a"};
+      --bg-deep:${theme.bg || "#060b16"};
+      --bg-panel:${theme.panel || "#0f1e3d"};
+      --bg-panel-2:${theme.panel2 || "#16295a"};
+    }`}</style>
+  );
+}
+
+function ClubSettingsTab({ profile, club, onThemeChange }) {
+  const [draft, setDraft] = useState({
+    accent: club.theme?.accent || "#2E7CF6",
+    dark: club.theme?.dark || "#123a8a",
+    bg: club.theme?.bg || "#060b16",
+    panel: club.theme?.panel || "#0f1e3d",
+    panel2: club.theme?.panel2 || "#16295a",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const applyPreset = async (preset) => {
+    const t = { accent: preset.accent, dark: preset.dark, bg: preset.bg, panel: preset.panel, panel2: preset.panel2 };
+    setDraft(t);
+    setSaving(true);
+    await supabase.from("clubs").update({ theme: t }).eq("id", club.id);
+    setSaving(false);
+    onThemeChange(t);
+  };
+
+  const applyCustom = async () => {
+    setSaving(true);
+    await supabase.from("clubs").update({ theme: draft }).eq("id", club.id);
+    setSaving(false);
+    onThemeChange(draft);
+  };
+
+  const field = (key, label) => (
+    <div>
+      <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>{label}</label>
+      <div className="flex items-center gap-2 mt-1">
+        <input
+          type="color"
+          value={draft[key]}
+          onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
+          className="w-10 h-9 rounded-lg border border-white/10 bg-transparent"
+        />
+        <span className="text-xs font-mono" style={{ color: "var(--muted)" }}>{draft[key]}</span>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-8">
+      <h1 className="font-display text-2xl tracking-wide mb-6">Settings</h1>
+
+      <div className="glass-panel p-5 mb-6">
+        <h2 className="font-display text-lg mb-3">Account</h2>
+        <div className="text-sm space-y-1" style={{ color: "var(--muted)" }}>
+          <div>Signed in as <span style={{ color: "var(--white)" }}>{profile.display_name}</span></div>
+          <div>Role: <span style={{ color: "var(--white)" }}>Club (full access)</span></div>
+        </div>
+      </div>
+
+      <InviteClubAdmin clubId={club.id} />
+
+      <div className="glass-panel p-5">
+        <h2 className="font-display text-lg mb-1 flex items-center gap-2"><Palette className="w-4 h-4" /> Club colours</h2>
+        <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
+          These fully re-theme the club view — background, panels, and accent — not just the highlights.
+        </p>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+          {FULL_PRESET_THEMES.map((p) => (
+            <button key={p.name} className="glass-card p-3 flex items-center gap-2 text-left" onClick={() => applyPreset(p)}>
+              <span className="w-6 h-6 rounded-full flex-shrink-0" style={{ background: `linear-gradient(180deg, ${p.accent}, ${p.dark})`, border: `2px solid ${p.panel2}` }} />
+              <span className="text-sm">{p.name}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-5">
+          {field("accent", "Accent")}
+          {field("dark", "Accent (dark)")}
+          {field("bg", "Background")}
+          {field("panel", "Panel")}
+          {field("panel2", "Panel (light)")}
+        </div>
+
+        <button className="btn-accent px-4 py-2 rounded-lg text-sm" onClick={applyCustom} disabled={saving}>
+          {saving ? "Saving…" : "Apply colours"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ClubDashboard({ profile, club, onSignOut }) {
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openTeamId, setOpenTeamId] = useState(null);
   const [activeTab, setActiveTab] = useState("teams");
   const [error, setError] = useState("");
+  const [liveTheme, setLiveTheme] = useState(club.theme);
 
   const loadTeams = async () => {
     setLoading(true);
@@ -557,6 +677,7 @@ export default function ClubDashboard({ profile, club, onSignOut }) {
 
   return (
     <div className="min-h-screen">
+      <ThemeInjector theme={liveTheme} />
       <div className="flex items-center justify-between px-6 h-16" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
         <div className="flex items-center gap-2">
           <Shield className="w-5 h-5" style={{ color: "var(--accent)" }} />
@@ -586,17 +707,23 @@ export default function ClubDashboard({ profile, club, onSignOut }) {
         >
           Documents
         </button>
+        <button
+          className={activeTab === "settings" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
+          onClick={() => setActiveTab("settings")}
+        >
+          Settings
+        </button>
       </div>
 
       {activeTab === "calendar" ? (
         <ClubCalendarTab teams={teams} />
       ) : activeTab === "documents" ? (
         <ClubDocumentsTab club={club} />
+      ) : activeTab === "settings" ? (
+        <ClubSettingsTab profile={profile} club={club} onThemeChange={setLiveTheme} />
       ) : (
       <div className="max-w-5xl mx-auto px-4 py-8">
         <h1 className="font-display text-2xl tracking-wide mb-6">Teams</h1>
-
-        <InviteClubAdmin clubId={club.id} />
 
         {error && <p className="text-sm mb-4" style={{ color: "#f28f8a" }}>{error}</p>}
 
