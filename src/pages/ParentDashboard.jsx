@@ -3,6 +3,7 @@ import { Shield, LogOut, Users, ArrowLeft } from "lucide-react";
 import { supabase } from "../lib/supabaseClient.js";
 import MatchDayView from "./MatchDay.jsx";
 import DocumentsView from "./Documents.jsx";
+import TrainingSessionView from "./TrainingSession.jsx";
 
 const PLAN_STATUSES = [
   { id: "needs_practice", label: "Needs practice", color: "#E8433D" },
@@ -187,16 +188,6 @@ function PlayerView({ player, isOwnChild, onBack }) {
         <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>Visible to every parent on the team.</p>
         <ReadOnlyWeeklyStats stats={player.stats} />
       </div>
-
-      {isOwnChild && (
-        <div className="glass-panel p-6">
-          <h2 className="font-display text-lg mb-1">Training plan</h2>
-          <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
-            Only visible to you, as this player's parent.
-          </p>
-          <ReadOnlyTrainingPlan playerId={player.id} />
-        </div>
-      )}
     </div>
   );
 }
@@ -320,6 +311,39 @@ function ParentCalendar({ team, ownChildIds }) {
   );
 }
 
+function ParentTrainingPlansTab({ children }) {
+  const [openChild, setOpenChild] = useState(null);
+
+  if (openChild) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-8">
+        <button className="text-sm flex items-center gap-1 mb-6" style={{ color: "var(--muted)" }} onClick={() => setOpenChild(null)}>
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to training plans
+        </button>
+        <h1 className="font-display text-2xl tracking-wide mb-1">{openChild.name || "Unnamed player"}</h1>
+        <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>Only visible to you, as this player's parent.</p>
+        <ReadOnlyTrainingPlan playerId={openChild.id} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-8">
+      <h1 className="font-display text-2xl tracking-wide mb-6">Training Plans</h1>
+      <div className="space-y-2">
+        {children.map((c) => (
+          <button key={c.id} className="glass-card w-full flex items-center gap-3 p-3 text-left" onClick={() => setOpenChild(c)}>
+            <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border-2" style={{ borderColor: "var(--accent)" }}>
+              <Users className="w-4 h-4 m-3" style={{ color: "var(--muted)" }} />
+            </div>
+            <span className="flex-1 font-medium">{c.name || "Unnamed player"}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ParentDashboard({ profile, onSignOut }) {
   const [children, setChildren] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -332,7 +356,7 @@ export default function ParentDashboard({ profile, onSignOut }) {
   useEffect(() => {
     supabase
       .from("parent_child_links")
-      .select("players(id, team_id, teams(id, name))")
+      .select("players(id, name, team_id, teams(id, name))")
       .eq("parent_id", profile.id)
       .then(({ data }) => {
         const kids = (data || []).map((r) => r.players).filter(Boolean);
@@ -420,6 +444,18 @@ export default function ParentDashboard({ profile, onSignOut }) {
             Match Day
           </button>
           <button
+            className={activeTab === "plans" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
+            onClick={() => setActiveTab("plans")}
+          >
+            Training Plans
+          </button>
+          <button
+            className={activeTab === "session" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
+            onClick={() => setActiveTab("session")}
+          >
+            Training Session
+          </button>
+          <button
             className={activeTab === "documents" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
             onClick={() => setActiveTab("documents")}
           >
@@ -434,6 +470,10 @@ export default function ParentDashboard({ profile, onSignOut }) {
         <ParentCalendar team={{ id: activeTeamId }} ownChildIds={ownChildIds} />
       ) : activeTab === "matchday" ? (
         <MatchDayView team={{ id: activeTeamId }} editable={false} />
+      ) : activeTab === "plans" ? (
+        <ParentTrainingPlansTab children={children.filter((c) => c.team_id === activeTeamId)} />
+      ) : activeTab === "session" ? (
+        <TrainingSessionView team={{ id: activeTeamId }} editable={false} />
       ) : activeTab === "documents" ? (
         <DocumentsView team={{ id: activeTeamId }} editable={false} />
       ) : (
