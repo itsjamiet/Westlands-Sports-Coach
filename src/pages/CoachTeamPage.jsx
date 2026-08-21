@@ -7,7 +7,7 @@ import TrainingSessionView, { Quadrant, TOOLS, defaultPitch } from "./TrainingSe
 import ClubCalendarTab from "./ClubCalendar.jsx";
 import DropdownMenu, { DropdownItem } from "../components/DropdownMenu.jsx";
 
-const POSITIONS = ["GK", "RB", "CB", "LB", "RM", "CM", "LM", "RW", "ST", "LW"];
+const POSITIONS = ["Any", "GK", "RB", "CB", "LB", "RM", "CM", "LM", "RW", "ST", "LW"];
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -347,16 +347,50 @@ function statTotals(stats) {
   return { goalsTotal, savesTotal, tacklesTotal, captainTotal, potmTotal, minutesPct };
 }
 
-function StatTotalsGrid({ stats }) {
+function useAttendanceStats(teamId, playerId) {
+  const [attendance, setAttendance] = useState(null);
+  useEffect(() => {
+    if (!teamId || !playerId) return;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    (async () => {
+      const { data: events } = await supabase.from("calendar_events").select("id, type, date").eq("team_id", teamId).lt("date", todayStr);
+      if (!events || events.length === 0) {
+        setAttendance({ trainingTotal: 0, trainingAttended: 0, matchTotal: 0, matchAttended: 0 });
+        return;
+      }
+      const eventIds = events.map((e) => e.id);
+      const { data: rsvps } = await supabase.from("rsvps").select("event_id, attended").eq("player_id", playerId).in("event_id", eventIds);
+      const attendedSet = new Set((rsvps || []).filter((r) => r.attended).map((r) => r.event_id));
+      const trainingEvents = events.filter((e) => e.type === "training");
+      const matchEvents = events.filter((e) => e.type === "match");
+      setAttendance({
+        trainingTotal: trainingEvents.length,
+        trainingAttended: trainingEvents.filter((e) => attendedSet.has(e.id)).length,
+        matchTotal: matchEvents.length,
+        matchAttended: matchEvents.filter((e) => attendedSet.has(e.id)).length,
+      });
+    })();
+  }, [teamId, playerId]);
+  return attendance;
+}
+
+function StatTotalsGrid({ stats, attendance }) {
   const t = statTotals(stats);
-  const boxes = [
+  const boxes = [];
+  if (attendance) {
+    boxes.push(
+      { label: "Training sessions attended", value: `${attendance.trainingAttended}/${attendance.trainingTotal}` },
+      { label: "Matches attended", value: `${attendance.matchAttended}/${attendance.matchTotal}` },
+    );
+  }
+  boxes.push(
     { label: "Minutes played", value: t.minutesPct === null ? "—" : `${t.minutesPct}%` },
     { label: "Goals", value: t.goalsTotal },
     { label: "Saves", value: t.savesTotal },
     { label: "Tackles", value: t.tacklesTotal },
     { label: "Captain", value: t.captainTotal },
     { label: "Player of the match", value: t.potmTotal },
-  ];
+  );
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
       {boxes.map((b) => (
@@ -369,7 +403,7 @@ function StatTotalsGrid({ stats }) {
   );
 }
 
-function WeeklyStatsEditor({ playerId }) {
+function WeeklyStatsEditor({ playerId, teamId }) {
   const [stats, setStats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -403,6 +437,8 @@ function WeeklyStatsEditor({ playerId }) {
   const updateStat = (id, patch) => {
     setStats((s) => s.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   };
+
+  const attendance = useAttendanceStats(teamId, playerId);
 
   const removeStat = (id) => {
     const next = stats.filter((x) => x.id !== id);
@@ -443,23 +479,23 @@ function WeeklyStatsEditor({ playerId }) {
               <div className="grid grid-cols-2 gap-2 mt-2">
                 <div>
                   <label className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Match mins</label>
-                  <input type="number" className="input-dark w-full font-mono text-sm" value={s.matchMinutes || 0} onChange={(e) => updateStat(s.id, { matchMinutes: e.target.value })} />
+                  <input type="number" className="input-dark w-full font-mono text-sm" placeholder="0" value={s.matchMinutes || ""} onChange={(e) => updateStat(s.id, { matchMinutes: e.target.value })} />
                 </div>
                 <div>
                   <label className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Mins played</label>
-                  <input type="number" className="input-dark w-full font-mono text-sm" value={s.minutes || 0} onChange={(e) => updateStat(s.id, { minutes: e.target.value })} />
+                  <input type="number" className="input-dark w-full font-mono text-sm" placeholder="0" value={s.minutes || ""} onChange={(e) => updateStat(s.id, { minutes: e.target.value })} />
                 </div>
                 <div>
                   <label className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Goals</label>
-                  <input type="number" className="input-dark w-full font-mono text-sm" value={s.goals || 0} onChange={(e) => updateStat(s.id, { goals: e.target.value })} />
+                  <input type="number" className="input-dark w-full font-mono text-sm" placeholder="0" value={s.goals || ""} onChange={(e) => updateStat(s.id, { goals: e.target.value })} />
                 </div>
                 <div>
                   <label className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Tackles</label>
-                  <input type="number" className="input-dark w-full font-mono text-sm" value={s.tackles || 0} onChange={(e) => updateStat(s.id, { tackles: e.target.value })} />
+                  <input type="number" className="input-dark w-full font-mono text-sm" placeholder="0" value={s.tackles || ""} onChange={(e) => updateStat(s.id, { tackles: e.target.value })} />
                 </div>
                 <div>
                   <label className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Saves</label>
-                  <input type="number" className="input-dark w-full font-mono text-sm" value={s.saves || 0} onChange={(e) => updateStat(s.id, { saves: e.target.value })} />
+                  <input type="number" className="input-dark w-full font-mono text-sm" placeholder="0" value={s.saves || ""} onChange={(e) => updateStat(s.id, { saves: e.target.value })} />
                 </div>
               </div>
               <div className="flex flex-col gap-2 mt-3 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
@@ -478,7 +514,7 @@ function WeeklyStatsEditor({ playerId }) {
       )}
 
       <h3 className="font-display text-base mb-2 mt-2">Stat totals</h3>
-      <StatTotalsGrid stats={stats} />
+      <StatTotalsGrid stats={stats} attendance={attendance} />
 
       {error && <p className="text-sm mt-2" style={{ color: "#f28f8a" }}>{error}</p>}
     </div>
@@ -580,7 +616,12 @@ function PlayerDetail({ player, onBack, onSaved, onDeleted }) {
         </div>
         <div className="glass-panel p-4">
           <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Position</label>
-          <select className="input-dark w-full mt-1" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}>
+          <select
+            className="w-full mt-1 rounded-lg px-2.5 py-2"
+            style={{ background: "#2E4E80", color: "white", border: "1px solid rgba(255,255,255,0.14)" }}
+            value={form.position}
+            onChange={(e) => setForm({ ...form, position: e.target.value })}
+          >
             {POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
@@ -594,7 +635,7 @@ function PlayerDetail({ player, onBack, onSaved, onDeleted }) {
 
       {showInviteParent && <InviteParent teamId={player.team_id} playerId={player.id} />}
 
-      <WeeklyStatsEditor playerId={player.id} />
+      <WeeklyStatsEditor playerId={player.id} teamId={player.team_id} />
     </div>
   );
 }
@@ -620,7 +661,7 @@ function TeamRoster({ team, onOpenPlayer }) {
     setError("");
     const { data, error } = await supabase
       .from("players")
-      .insert({ team_id: team.id, name: "New Player", position: "GK" })
+      .insert({ team_id: team.id, name: "New Player", position: "Any" })
       .select()
       .single();
     if (error) {
