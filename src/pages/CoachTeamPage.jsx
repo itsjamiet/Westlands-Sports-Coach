@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Shield, LogOut, Plus, Users, ArrowLeft, Camera, Trash2 } from "lucide-react";
+import { Shield, LogOut, Plus, Users, ArrowLeft, Camera, Trash2, Circle, ArrowUpRight, Eraser } from "lucide-react";
 import { supabase } from "../lib/supabaseClient.js";
 import MatchDayView from "./MatchDay.jsx";
 import DocumentsView from "./Documents.jsx";
-import TrainingSessionView from "./TrainingSession.jsx";
+import TrainingSessionView, { Quadrant, TOOLS, defaultPitch } from "./TrainingSession.jsx";
 
 const POSITIONS = ["GK", "RB", "CB", "LB", "RM", "CM", "LM", "RW", "ST", "LW"];
 
@@ -114,11 +114,69 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+function DrillEditor({ drill, onUpdate, onRemove }) {
+  const [toolId, setToolId] = useState("blue");
+  const tool = TOOLS.find((t) => t.id === toolId) || null;
+
+  return (
+    <div className="glass-panel p-4">
+      <div className="flex items-center gap-3 mb-3">
+        <input
+          className="input-dark flex-1 font-display text-base"
+          placeholder="Drill title (e.g. Wall pass triangles)"
+          value={drill.title}
+          onChange={(e) => onUpdate({ title: e.target.value })}
+        />
+        <button className="opacity-50 hover:opacity-100 flex-shrink-0" onClick={onRemove}>
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-3">
+        {TOOLS.map((t) => (
+          <button
+            key={t.id}
+            className={`btn-ghost px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-1 ${toolId === t.id ? "ring-2 ring-white" : ""}`}
+            onClick={() => setToolId(t.id)}
+          >
+            {t.kind === "dot" && <Circle className="w-3 h-3" fill={t.color} stroke={t.color} />}
+            {t.kind === "arrow" && <ArrowUpRight className="w-3 h-3" />}
+            {t.kind === "drag-arrow" && <ArrowUpRight className="w-3 h-3" strokeWidth={3} />}
+            {t.kind === "erase" && <Eraser className="w-3 h-3" />}
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <Quadrant
+        index={drill.id}
+        quadrant={drill.pitch || defaultPitch()}
+        setQuadrant={(val) => onUpdate({ pitch: val })}
+        tool={tool}
+        editable={true}
+        label="Drill pitch"
+        showNotes={false}
+      />
+
+      <div className="mt-3">
+        <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Details</label>
+        <textarea
+          className="input-dark w-full mt-1 min-h-[80px]"
+          placeholder="Explain how the drill works, coaching points, timing, etc."
+          value={drill.description || ""}
+          onChange={(e) => onUpdate({ description: e.target.value })}
+        />
+      </div>
+    </div>
+  );
+}
+
 function TrainingPlanEditor({ playerId }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [openDrillsRowId, setOpenDrillsRowId] = useState(null);
 
   useEffect(() => {
     supabase
@@ -127,7 +185,7 @@ function TrainingPlanEditor({ playerId }) {
       .eq("player_id", playerId)
       .maybeSingle()
       .then(({ data }) => {
-        setRows(data?.rows?.length ? data.rows : Array.from({ length: 5 }, () => ({ id: uid(), title: "", content: "", status: "needs_practice" })));
+        setRows(data?.rows?.length ? data.rows : Array.from({ length: 5 }, () => ({ id: uid(), title: "", content: "", status: "needs_practice", drills: [] })));
         setLoading(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -155,8 +213,29 @@ function TrainingPlanEditor({ playerId }) {
   };
 
   const addRow = () => {
-    const next = [...rows, { id: uid(), title: "", content: "", status: "needs_practice" }];
+    const next = [...rows, { id: uid(), title: "", content: "", status: "needs_practice", drills: [] }];
     setRows(next);
+  };
+
+  const addDrill = (rowId) => {
+    const next = rows.map((r) =>
+      r.id === rowId ? { ...r, drills: [...(r.drills || []), { id: uid(), title: "", description: "", pitch: defaultPitch() }] } : r
+    );
+    setRows(next);
+    save(next);
+  };
+
+  const updateDrill = (rowId, drillId, patch) => {
+    const next = rows.map((r) =>
+      r.id !== rowId ? r : { ...r, drills: (r.drills || []).map((d) => (d.id === drillId ? { ...d, ...patch } : d)) }
+    );
+    setRows(next);
+  };
+
+  const removeDrill = (rowId, drillId) => {
+    const next = rows.map((r) => (r.id !== rowId ? r : { ...r, drills: (r.drills || []).filter((d) => d.id !== drillId) }));
+    setRows(next);
+    save(next);
   };
 
   return (
@@ -197,25 +276,50 @@ function TrainingPlanEditor({ playerId }) {
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  {PLAN_STATUSES.map((s) => {
-                    const active = status.id === s.id;
-                    return (
-                      <button
-                        key={s.id}
-                        className="text-xs px-2.5 py-1 rounded-full"
-                        style={{
-                          background: active ? s.color : "rgba(255,255,255,0.06)",
-                          color: active ? "#0b1223" : "var(--muted)",
-                          fontWeight: active ? 700 : 400,
-                        }}
-                        onClick={() => updateRow(row.id, { status: s.id })}
-                      >
-                        {s.label}
-                      </button>
-                    );
-                  })}
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-1.5">
+                    {PLAN_STATUSES.map((s) => {
+                      const active = status.id === s.id;
+                      return (
+                        <button
+                          key={s.id}
+                          className="text-xs px-2.5 py-1 rounded-full"
+                          style={{
+                            background: active ? s.color : "rgba(255,255,255,0.06)",
+                            color: active ? "#0b1223" : "var(--muted)",
+                            fontWeight: active ? 700 : 400,
+                          }}
+                          onClick={() => updateRow(row.id, { status: s.id })}
+                        >
+                          {s.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    className="text-xs"
+                    style={{ color: "var(--accent)" }}
+                    onClick={() => setOpenDrillsRowId(openDrillsRowId === row.id ? null : row.id)}
+                  >
+                    Improvement drills {(row.drills || []).length > 0 ? `(${row.drills.length})` : ""}
+                  </button>
                 </div>
+
+                {openDrillsRowId === row.id && (
+                  <div className="space-y-4 pt-2">
+                    {(row.drills || []).map((drill) => (
+                      <DrillEditor
+                        key={drill.id}
+                        drill={drill}
+                        onUpdate={(patch) => updateDrill(row.id, drill.id, patch)}
+                        onRemove={() => removeDrill(row.id, drill.id)}
+                      />
+                    ))}
+                    <button className="btn-accent w-full py-2.5 rounded-lg text-sm flex items-center justify-center gap-2" onClick={() => addDrill(row.id)}>
+                      <Plus className="w-4 h-4" /> Add drill
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
