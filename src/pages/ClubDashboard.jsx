@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Shield, LogOut, Plus, Users, Trash2, ArrowLeft, Upload, FileText, Palette } from "lucide-react";
 import { supabase } from "../lib/supabaseClient.js";
-import { Quadrant } from "./TrainingSession.jsx";
 import ClubCalendarTab from "./ClubCalendar.jsx";
 import DropdownMenu, { DropdownItem } from "../components/DropdownMenu.jsx";
 
@@ -146,12 +145,6 @@ function sortByNumber(players) {
   });
 }
 
-const PLAN_STATUSES = [
-  { id: "needs_practice", label: "Needs practice", color: "#E8433D" },
-  { id: "improving", label: "Improving", color: "#F2A31D" },
-  { id: "mastered", label: "Mastered", color: "#1FB65A" },
-];
-
 function statTotals(stats) {
   const goalsTotal = stats.reduce((s, x) => s + (Number(x.goals) || 0), 0);
   const savesTotal = stats.reduce((s, x) => s + (Number(x.saves) || 0), 0);
@@ -190,18 +183,37 @@ function ClubPlayerCard({ player, onOpen }) {
   );
 }
 
-function ClubPlayerView({ player, onBack }) {
-  const [plan, setPlan] = useState(null);
-  const [openDrillsRowId, setOpenDrillsRowId] = useState(null);
-
+function useAttendanceStats(teamId, playerId) {
+  const [attendance, setAttendance] = useState(null);
   useEffect(() => {
-    supabase.from("training_plans").select("rows").eq("player_id", player.id).maybeSingle().then(({ data }) => {
-      setPlan(data?.rows || []);
-    });
-  }, [player.id]);
+    if (!teamId || !playerId) return;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    (async () => {
+      const { data: events } = await supabase.from("calendar_events").select("id, type, date").eq("team_id", teamId).lt("date", todayStr);
+      if (!events || events.length === 0) {
+        setAttendance({ trainingTotal: 0, trainingAttended: 0, matchTotal: 0, matchAttended: 0 });
+        return;
+      }
+      const eventIds = events.map((e) => e.id);
+      const { data: rsvps } = await supabase.from("rsvps").select("event_id, attended").eq("player_id", playerId).in("event_id", eventIds);
+      const attendedSet = new Set((rsvps || []).filter((r) => r.attended).map((r) => r.event_id));
+      const trainingEvents = events.filter((e) => e.type === "training");
+      const matchEvents = events.filter((e) => e.type === "match");
+      setAttendance({
+        trainingTotal: trainingEvents.length,
+        trainingAttended: trainingEvents.filter((e) => attendedSet.has(e.id)).length,
+        matchTotal: matchEvents.length,
+        matchAttended: matchEvents.filter((e) => attendedSet.has(e.id)).length,
+      });
+    })();
+  }, [teamId, playerId]);
+  return attendance;
+}
 
+function ClubPlayerView({ player, onBack }) {
   const stats = player.stats || [];
   const t = statTotals(stats);
+  const attendance = useAttendanceStats(player.team_id, player.id);
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
@@ -241,13 +253,17 @@ function ClubPlayerView({ player, onBack }) {
         </div>
       </div>
 
-      <div className="glass-panel p-6 mb-6">
-        <h2 className="font-display text-lg mb-3">Weekly stats</h2>
-        {stats.length === 0 ? (
+      <div className="glass-panel p-6">
+        <h2 className="font-display text-lg mb-3">Overall stats</h2>
+        {stats.length === 0 && !attendance ? (
           <p className="text-sm" style={{ color: "var(--muted)" }}>No stats logged yet.</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {[
+              ...(attendance ? [
+                { label: "Training sessions attended", value: `${attendance.trainingAttended}/${attendance.trainingTotal}` },
+                { label: "Matches attended", value: `${attendance.matchAttended}/${attendance.matchTotal}` },
+              ] : []),
               { label: "Minutes played", value: t.minutesPct === null ? "—" : `${t.minutesPct}%` },
               { label: "Goals", value: t.goalsTotal },
               { label: "Saves", value: t.savesTotal },
@@ -260,61 +276,6 @@ function ClubPlayerView({ player, onBack }) {
                 <div className="text-xs" style={{ color: "var(--muted)" }}>{b.label}</div>
               </div>
             ))}
-          </div>
-        )}
-      </div>
-
-      <div className="glass-panel p-6">
-        <h2 className="font-display text-lg mb-3">Training plan</h2>
-        {plan === null ? (
-          <p className="text-sm" style={{ color: "var(--muted)" }}>Loading…</p>
-        ) : plan.length === 0 ? (
-          <p className="text-sm" style={{ color: "var(--muted)" }}>No focus areas added yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {plan.map((row) => {
-              const status = PLAN_STATUSES.find((s) => s.id === row.status) || PLAN_STATUSES[0];
-              const drills = row.drills || [];
-              return (
-                <div key={row.id} className="glass-card p-3">
-                  <div className="font-medium">{row.title || "Untitled"}</div>
-                  {row.content && <div className="text-sm mt-0.5" style={{ color: "var(--muted)" }}>{row.content}</div>}
-                  <div className="flex items-center justify-between mt-2 flex-wrap gap-2">
-                    <span className="text-xs px-2 py-0.5 rounded-full inline-block" style={{ background: status.color, color: "#0b1223", fontWeight: 700 }}>
-                      {status.label}
-                    </span>
-                    {drills.length > 0 && (
-                      <button
-                        className="text-xs"
-                        style={{ color: "var(--accent)" }}
-                        onClick={() => setOpenDrillsRowId(openDrillsRowId === row.id ? null : row.id)}
-                      >
-                        Improvement drills ({drills.length})
-                      </button>
-                    )}
-                  </div>
-                  {openDrillsRowId === row.id && (
-                    <div className="space-y-4 mt-3 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                      {drills.map((drill) => (
-                        <div key={drill.id} className="glass-panel p-4">
-                          <div className="font-display text-base mb-3">{drill.title || "Untitled drill"}</div>
-                          <Quadrant
-                            index={drill.id}
-                            quadrant={drill.pitch || { markers: [], arrows: [] }}
-                            setQuadrant={() => {}}
-                            tool={null}
-                            editable={false}
-                            label="Drill pitch"
-                            showNotes={false}
-                          />
-                          {drill.description && <p className="text-sm mt-3" style={{ color: "var(--muted)" }}>{drill.description}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
           </div>
         )}
       </div>
