@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient.js";
 import MatchDayView from "./MatchDay.jsx";
 import DocumentsView from "./Documents.jsx";
 import TrainingSessionView, { Quadrant, TOOLS, defaultPitch } from "./TrainingSession.jsx";
+import ClubCalendarTab from "./ClubCalendar.jsx";
 
 const POSITIONS = ["GK", "RB", "CB", "LB", "RM", "CM", "LM", "RW", "ST", "LW"];
 
@@ -965,6 +966,17 @@ export default function CoachTeamPage({ profile, onSignOut }) {
 
   const activeTeam = teams.find((t) => t.id === activeTeamId);
 
+  const [clubTeams, setClubTeams] = useState([]);
+  useEffect(() => {
+    if (!activeTeamId) return;
+    supabase.from("teams").select("club_id").eq("id", activeTeamId).single().then(({ data }) => {
+      if (!data?.club_id) return;
+      supabase.from("teams").select("id, name, logo_url").eq("club_id", data.club_id).then(({ data: ct }) => {
+        setClubTeams(ct || []);
+      });
+    });
+  }, [activeTeamId]);
+
   const handleOpenPlayer = (player, reload) => {
     setOpenPlayer(player);
     setReloadRoster(() => reload);
@@ -1031,6 +1043,12 @@ export default function CoachTeamPage({ profile, onSignOut }) {
             Calendar
           </button>
           <button
+            className={activeTab === "clubCalendar" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
+            onClick={() => setActiveTab("clubCalendar")}
+          >
+            Club Calendar
+          </button>
+          <button
             className={activeTab === "matchday" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
             onClick={() => setActiveTab("matchday")}
           >
@@ -1066,6 +1084,8 @@ export default function CoachTeamPage({ profile, onSignOut }) {
         />
       ) : activeTab === "calendar" ? (
         activeTeam && <TeamCalendar team={activeTeam} editable={true} />
+      ) : activeTab === "clubCalendar" ? (
+        <ClubCalendarTab teams={clubTeams} />
       ) : activeTab === "matchday" ? (
         activeTeam && <MatchDayView team={activeTeam} editable={true} />
       ) : activeTab === "plans" ? (
