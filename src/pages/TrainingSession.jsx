@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { Circle, ArrowUpRight, Eraser } from "lucide-react";
 import { supabase } from "../lib/supabaseClient.js";
 
-function uid() {
+export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-const TOOLS = [
+export const TOOLS = [
   { id: "blue", label: "Blue marker", kind: "dot", color: "#2E7CF6" },
   { id: "red", label: "Red marker", kind: "dot", color: "#E8433D" },
   { id: "run", label: "Run (solid)", kind: "arrow", style: "solid" },
@@ -16,11 +16,15 @@ const TOOLS = [
   { id: "erase", label: "Erase", kind: "erase" },
 ];
 
+export function defaultPitch() {
+  return { markers: [], arrows: [], notes: "" };
+}
+
 function defaultSession() {
   return { quadrants: Array.from({ length: 4 }, () => ({ markers: [], arrows: [], notes: "" })) };
 }
 
-function Quadrant({ index, quadrant, setQuadrant, tool, editable, label }) {
+export function Quadrant({ index, quadrant, setQuadrant, tool, editable, label, showNotes = true }) {
   const svgRef = useRef(null);
   const [pending, setPending] = useState(null);
   const [dragMarkerId, setDragMarkerId] = useState(null);
@@ -170,16 +174,18 @@ function Quadrant({ index, quadrant, setQuadrant, tool, editable, label }) {
         {pending && <circle cx={pending.x} cy={pending.y} r="1.3" fill="yellow" />}
       </svg>
 
-      <div className="mt-3">
-        <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Notes</label>
-        <textarea
-          className="input-dark w-full mt-1 min-h-[60px]"
-          placeholder={editable ? "Add notes for this session…" : "No notes added yet."}
-          value={quadrant.notes || ""}
-          disabled={!editable}
-          onChange={(e) => setQuadrant({ ...quadrant, notes: e.target.value })}
-        />
-      </div>
+      {showNotes && (
+        <div className="mt-3">
+          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Notes</label>
+          <textarea
+            className="input-dark w-full mt-1 min-h-[60px]"
+            placeholder={editable ? "Add notes for this session…" : "No notes added yet."}
+            value={quadrant.notes || ""}
+            disabled={!editable}
+            onChange={(e) => setQuadrant({ ...quadrant, notes: e.target.value })}
+          />
+        </div>
+      )}
     </div>
   );
 }
