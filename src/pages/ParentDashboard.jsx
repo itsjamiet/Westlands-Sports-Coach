@@ -3,7 +3,7 @@ import { Shield, LogOut, Users, ArrowLeft } from "lucide-react";
 import { supabase } from "../lib/supabaseClient.js";
 import MatchDayView from "./MatchDay.jsx";
 import DocumentsView from "./Documents.jsx";
-import TrainingSessionView from "./TrainingSession.jsx";
+import TrainingSessionView, { Quadrant } from "./TrainingSession.jsx";
 
 const PLAN_STATUSES = [
   { id: "needs_practice", label: "Needs practice", color: "#E8433D" },
@@ -48,6 +48,7 @@ function PlayerCard({ player, onOpen }) {
 function ReadOnlyTrainingPlan({ playerId }) {
   const [rows, setRows] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [openDrillsRowId, setOpenDrillsRowId] = useState(null);
 
   useEffect(() => {
     supabase
@@ -69,16 +70,50 @@ function ReadOnlyTrainingPlan({ playerId }) {
     <div className="space-y-2">
       {rows.map((row) => {
         const status = PLAN_STATUSES.find((s) => s.id === row.status) || PLAN_STATUSES[0];
+        const drills = row.drills || [];
         return (
           <div key={row.id} className="glass-card p-3">
             <div className="font-medium">{row.title || "Untitled"}</div>
             {row.content && <div className="text-sm mt-0.5" style={{ color: "var(--muted)" }}>{row.content}</div>}
-            <span
-              className="text-xs px-2 py-0.5 rounded-full inline-block mt-2"
-              style={{ background: status.color, color: "#0b1223", fontWeight: 700 }}
-            >
-              {status.label}
-            </span>
+            <div className="flex items-center justify-between mt-2 flex-wrap gap-2">
+              <span
+                className="text-xs px-2 py-0.5 rounded-full inline-block"
+                style={{ background: status.color, color: "#0b1223", fontWeight: 700 }}
+              >
+                {status.label}
+              </span>
+              {drills.length > 0 && (
+                <button
+                  className="text-xs"
+                  style={{ color: "var(--accent)" }}
+                  onClick={() => setOpenDrillsRowId(openDrillsRowId === row.id ? null : row.id)}
+                >
+                  Improvement drills ({drills.length})
+                </button>
+              )}
+            </div>
+
+            {openDrillsRowId === row.id && (
+              <div className="space-y-4 mt-3 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                {drills.map((drill) => (
+                  <div key={drill.id} className="glass-panel p-4">
+                    <div className="font-display text-base mb-3">{drill.title || "Untitled drill"}</div>
+                    <Quadrant
+                      index={drill.id}
+                      quadrant={drill.pitch || { markers: [], arrows: [] }}
+                      setQuadrant={() => {}}
+                      tool={null}
+                      editable={false}
+                      label="Drill pitch"
+                      showNotes={false}
+                    />
+                    {drill.description && (
+                      <p className="text-sm mt-3" style={{ color: "var(--muted)" }}>{drill.description}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
       })}
@@ -493,4 +528,5 @@ export default function ParentDashboard({ profile, onSignOut }) {
     </div>
   );
 }
+
 
