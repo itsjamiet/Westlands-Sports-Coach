@@ -88,6 +88,8 @@ export default function AcceptInvite({ inviteId, session, onDone }) {
     );
   }
 
+  const displayName = info.role === "club" ? info.club_name : info.team_name;
+
   if (info.used && !redeemed) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
@@ -104,7 +106,7 @@ export default function AcceptInvite({ inviteId, session, onDone }) {
         <div className="glass-panel p-6 max-w-sm text-center">
           <h1 className="font-display text-xl tracking-wide mb-2">You're in ✅</h1>
           <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
-            You've joined <span style={{ color: "var(--white)" }}>{info.team_name}</span> as {info.role}
+            You've joined <span style={{ color: "var(--white)" }}>{displayName}</span> as {info.role}
             {info.role === "parent" && info.player_name ? (
               <> of <span style={{ color: "var(--white)" }}>{info.player_name}</span></>
             ) : null}
@@ -132,11 +134,12 @@ export default function AcceptInvite({ inviteId, session, onDone }) {
             <Shield className="w-7 h-7" style={{ color: "var(--accent)" }} />
           </div>
           <h1 className="font-display text-2xl font-semibold tracking-wide text-center">
-            Join <span style={{ color: "var(--accent)" }}>{info.team_name}</span>
+            Join <span style={{ color: "var(--accent)" }}>{displayName}</span>
           </h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            You've been invited as a {info.role}
-            {info.role === "parent" && info.player_name ? ` of ${info.player_name}` : ""}. Create your account to join.
+            {info.role === "club"
+              ? "You've been invited as a club admin. Create your account to join."
+              : <>You've been invited as a {info.role}{info.role === "parent" && info.player_name ? ` of ${info.player_name}` : ""}. Create your account to join.</>}
           </p>
         </div>
 
@@ -167,3 +170,4 @@ export default function AcceptInvite({ inviteId, session, onDone }) {
     </div>
   );
 }
+
