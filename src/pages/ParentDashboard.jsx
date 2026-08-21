@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Shield, LogOut, Users, ArrowLeft } from "lucide-react";
 import { supabase } from "../lib/supabaseClient.js";
+import MatchDayView from "./MatchDay.jsx";
+import DocumentsView from "./Documents.jsx";
 
 const PLAN_STATUSES = [
   { id: "needs_practice", label: "Needs practice", color: "#E8433D" },
@@ -411,6 +413,18 @@ export default function ParentDashboard({ profile, onSignOut }) {
           >
             Calendar
           </button>
+          <button
+            className={activeTab === "matchday" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
+            onClick={() => setActiveTab("matchday")}
+          >
+            Match Day
+          </button>
+          <button
+            className={activeTab === "documents" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
+            onClick={() => setActiveTab("documents")}
+          >
+            Documents
+          </button>
         </div>
       )}
 
@@ -418,6 +432,10 @@ export default function ParentDashboard({ profile, onSignOut }) {
         <PlayerView player={openPlayer} isOwnChild={ownChildIds.has(openPlayer.id)} onBack={() => setOpenPlayer(null)} />
       ) : activeTab === "calendar" ? (
         <ParentCalendar team={{ id: activeTeamId }} ownChildIds={ownChildIds} />
+      ) : activeTab === "matchday" ? (
+        <MatchDayView team={{ id: activeTeamId }} editable={false} />
+      ) : activeTab === "documents" ? (
+        <DocumentsView team={{ id: activeTeamId }} editable={false} />
       ) : (
         <div className="max-w-5xl mx-auto px-4 py-8">
           <h1 className="font-display text-2xl tracking-wide mb-6">{teamsMap[activeTeamId]?.name}</h1>
