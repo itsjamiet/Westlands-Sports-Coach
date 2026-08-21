@@ -199,10 +199,130 @@ function PlayerView({ player, isOwnChild, onBack }) {
   );
 }
 
+const RSVP_STATUSES = {
+  pending: { label: "Pending", color: "var(--muted)" },
+  attending: { label: "Attending", color: "#1FB65A" },
+  not_attending: { label: "Not attending", color: "#E8433D" },
+};
+const RSVP_ORDER = ["pending", "attending", "not_attending"];
+
+function ParentEventCard({ event, players, ownChildIds }) {
+  const [expanded, setExpanded] = useState(false);
+  const [rsvps, setRsvps] = useState(null);
+
+  const loadRsvps = async () => {
+    const { data } = await supabase.from("rsvps").select("*").eq("event_id", event.id);
+    const map = {};
+    (data || []).forEach((r) => { map[r.player_id] = r; });
+    setRsvps(map);
+  };
+
+  const toggle = () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && !rsvps) loadRsvps();
+  };
+
+  const cycleStatus = async (playerId, current) => {
+    if (!ownChildIds.has(playerId)) return;
+    const next = RSVP_ORDER[(RSVP_ORDER.indexOf(current || "pending") + 1) % RSVP_ORDER.length];
+    const { error } = await supabase.rpc("submit_rsvp", { p_event_id: event.id, p_player_id: playerId, p_status: next });
+    if (!error) loadRsvps();
+  };
+
+  return (
+    <div className="glass-card p-4">
+      <button className="w-full text-left" onClick={toggle}>
+        <span
+          className="text-xs px-2 py-0.5 rounded-full font-medium inline-block mb-1"
+          style={{ background: event.type === "match" ? "rgba(232,67,61,0.18)" : "rgba(46,124,246,0.18)", color: event.type === "match" ? "#f28f8a" : "#8fb8ff" }}
+        >
+          {event.type === "match" ? "Match" : "Training"}
+        </span>
+        <div className="font-display text-lg tracking-wide">
+          {event.title || (event.type === "match" ? `vs ${event.opponent || "TBC"}` : "Training session")}
+        </div>
+        <div className="text-xs mt-1 flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: "var(--muted)" }}>
+          <span>{event.date}{event.time ? ` · ${event.time}` : ""}</span>
+          {event.location && <span>{event.location}</span>}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="mt-4 pt-4 space-y-1.5" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+          {event.notes && <p className="text-sm mb-2" style={{ color: "var(--muted)" }}>{event.notes}</p>}
+          {!rsvps ? (
+            <p className="text-sm" style={{ color: "var(--muted)" }}>Loading…</p>
+          ) : (
+            players.map((p) => {
+              const r = rsvps[p.id] || { status: "pending" };
+              const meta = RSVP_STATUSES[r.status] || RSVP_STATUSES.pending;
+              const isOwn = ownChildIds.has(p.id);
+              return (
+                <div key={p.id} className="flex items-center gap-3 p-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
+                  <span className="text-sm flex-1">{p.name || "Unnamed"}{isOwn ? " (your child)" : ""}</span>
+                  <button
+                    className="text-xs px-2.5 py-1 rounded-full disabled:cursor-default"
+                    style={{ background: "rgba(255,255,255,0.06)", color: meta.color }}
+                    onClick={() => cycleStatus(p.id, r.status)}
+                    disabled={!isOwn}
+                  >
+                    {meta.label}
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ParentCalendar({ team, ownChildIds }) {
+  const [events, setEvents] = useState([]);
+  const [players, setPlayers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      supabase.from("calendar_events").select("*").eq("team_id", team.id).order("date"),
+      supabase.from("players").select("id, name, number").eq("team_id", team.id),
+    ]).then(([{ data: ev }, { data: pl }]) => {
+      setEvents(ev || []);
+      setPlayers(pl || []);
+      setLoading(false);
+    });
+  }, [team.id]);
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      <h1 className="font-display text-2xl tracking-wide mb-2">Calendar</h1>
+      <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+        You can see the whole team's schedule — tap your own child's RSVP to update it.
+      </p>
+
+      {loading ? (
+        <p style={{ color: "var(--muted)" }}>Loading…</p>
+      ) : events.length === 0 ? (
+        <div className="glass-panel p-10 text-center" style={{ color: "var(--muted)" }}>No events on the calendar yet.</div>
+      ) : (
+        <div className="space-y-3">
+          {events.map((ev) => (
+            <ParentEventCard key={ev.id} event={ev} players={players} ownChildIds={ownChildIds} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ParentDashboard({ profile, onSignOut }) {
   const [children, setChildren] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTeamId, setActiveTeamId] = useState(null);
+  const [activeTab, setActiveTab] = useState("team");
   const [roster, setRoster] = useState([]);
   const [rosterLoading, setRosterLoading] = useState(false);
   const [openPlayer, setOpenPlayer] = useState(null);
@@ -277,8 +397,27 @@ export default function ParentDashboard({ profile, onSignOut }) {
         </button>
       </div>
 
+      {!openPlayer && (
+        <div className="flex gap-2 px-6 pt-4">
+          <button
+            className={activeTab === "team" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
+            onClick={() => setActiveTab("team")}
+          >
+            Team
+          </button>
+          <button
+            className={activeTab === "calendar" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
+            onClick={() => setActiveTab("calendar")}
+          >
+            Calendar
+          </button>
+        </div>
+      )}
+
       {openPlayer ? (
         <PlayerView player={openPlayer} isOwnChild={ownChildIds.has(openPlayer.id)} onBack={() => setOpenPlayer(null)} />
+      ) : activeTab === "calendar" ? (
+        <ParentCalendar team={{ id: activeTeamId }} ownChildIds={ownChildIds} />
       ) : (
         <div className="max-w-5xl mx-auto px-4 py-8">
           <h1 className="font-display text-2xl tracking-wide mb-6">{teamsMap[activeTeamId]?.name}</h1>
@@ -296,3 +435,4 @@ export default function ParentDashboard({ profile, onSignOut }) {
     </div>
   );
 }
+
