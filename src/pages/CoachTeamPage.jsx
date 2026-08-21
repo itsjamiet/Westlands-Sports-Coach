@@ -545,10 +545,254 @@ function TeamRoster({ team, onOpenPlayer }) {
   );
 }
 
+const RSVP_STATUSES = {
+  pending: { label: "Pending", color: "var(--muted)" },
+  attending: { label: "Attending", color: "#1FB65A" },
+  not_attending: { label: "Not attending", color: "#E8433D" },
+};
+const RSVP_ORDER = ["pending", "attending", "not_attending"];
+
+function EventForm({ teamId, onCreated, onCancel }) {
+  const [form, setForm] = useState({ type: "training", title: "", date: "", time: "", location: "", opponent: "", notes: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const save = async () => {
+    if (!form.date) return;
+    setSaving(true);
+    setError("");
+    const { data, error } = await supabase.from("calendar_events").insert({ team_id: teamId, ...form }).select().single();
+    setSaving(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    onCreated(data);
+  };
+
+  return (
+    <div className="glass-panel p-5 mb-6 space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Type</label>
+          <select className="input-dark w-full mt-1" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+            <option value="training">Training</option>
+            <option value="match">Match</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Title (optional)</label>
+          <input className="input-dark w-full mt-1" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+        </div>
+        <div>
+          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Date</label>
+          <input type="date" className="input-dark w-full mt-1" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+        </div>
+        <div>
+          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Time</label>
+          <input type="time" className="input-dark w-full mt-1" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
+        </div>
+        <div>
+          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Location</label>
+          <input className="input-dark w-full mt-1" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+        </div>
+        {form.type === "match" && (
+          <div>
+            <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Opponent</label>
+            <input className="input-dark w-full mt-1" value={form.opponent} onChange={(e) => setForm({ ...form, opponent: e.target.value })} />
+          </div>
+        )}
+      </div>
+      <div>
+        <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Notes</label>
+        <input className="input-dark w-full mt-1" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+      </div>
+      {error && <p className="text-sm" style={{ color: "#f28f8a" }}>{error}</p>}
+      <div className="flex gap-2">
+        <button className="btn-accent px-4 py-2 rounded-lg text-sm" onClick={save} disabled={saving || !form.date}>
+          {saving ? "Saving…" : "Save event"}
+        </button>
+        <button className="btn-ghost px-4 py-2 rounded-lg text-sm" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function EventCard({ event, players, editable, ownChildIds, onDeleted }) {
+  const [expanded, setExpanded] = useState(false);
+  const [rsvps, setRsvps] = useState(null);
+
+  const loadRsvps = async () => {
+    const { data } = await supabase.from("rsvps").select("*").eq("event_id", event.id);
+    const map = {};
+    (data || []).forEach((r) => { map[r.player_id] = r; });
+    setRsvps(map);
+  };
+
+  const toggle = () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && !rsvps) loadRsvps();
+  };
+
+  const cycleStatus = async (playerId, current) => {
+    const next = RSVP_ORDER[(RSVP_ORDER.indexOf(current || "pending") + 1) % RSVP_ORDER.length];
+    if (editable) {
+      await supabase.from("rsvps").upsert({ event_id: event.id, player_id: playerId, status: next }, { onConflict: "event_id,player_id" });
+    } else if (ownChildIds?.has(playerId)) {
+      await supabase.rpc("submit_rsvp", { p_event_id: event.id, p_player_id: playerId, p_status: next });
+    } else {
+      return;
+    }
+    loadRsvps();
+  };
+
+  const toggleAttended = async (playerId, current) => {
+    await supabase.from("rsvps").upsert({ event_id: event.id, player_id: playerId, attended: !current }, { onConflict: "event_id,player_id" });
+    loadRsvps();
+  };
+
+  const deleteEvent = async () => {
+    if (!confirm("Delete this event?")) return;
+    await supabase.from("calendar_events").delete().eq("id", event.id);
+    onDeleted(event.id);
+  };
+
+  return (
+    <div className="glass-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <button className="flex-1 text-left" onClick={toggle}>
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <span
+              className="text-xs px-2 py-0.5 rounded-full font-medium"
+              style={{ background: event.type === "match" ? "rgba(232,67,61,0.18)" : "rgba(46,124,246,0.18)", color: event.type === "match" ? "#f28f8a" : "#8fb8ff" }}
+            >
+              {event.type === "match" ? "Match" : "Training"}
+            </span>
+          </div>
+          <div className="font-display text-lg tracking-wide">
+            {event.title || (event.type === "match" ? `vs ${event.opponent || "TBC"}` : "Training session")}
+          </div>
+          <div className="text-xs mt-1 flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: "var(--muted)" }}>
+            <span>{event.date}{event.time ? ` · ${event.time}` : ""}</span>
+            {event.location && <span>{event.location}</span>}
+          </div>
+        </button>
+        {editable && (
+          <button className="opacity-50 hover:opacity-100 flex-shrink-0" onClick={deleteEvent}>
+            <Trash2 className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {expanded && (
+        <div className="mt-4 pt-4 space-y-1.5" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+          {event.notes && <p className="text-sm mb-2" style={{ color: "var(--muted)" }}>{event.notes}</p>}
+          {!rsvps ? (
+            <p className="text-sm" style={{ color: "var(--muted)" }}>Loading…</p>
+          ) : players.length === 0 ? (
+            <p className="text-sm" style={{ color: "var(--muted)" }}>No players on the squad yet.</p>
+          ) : (
+            players.map((p) => {
+              const r = rsvps[p.id] || { status: "pending", attended: false };
+              const meta = RSVP_STATUSES[r.status] || RSVP_STATUSES.pending;
+              const canEdit = editable || ownChildIds?.has(p.id);
+              return (
+                <div key={p.id} className="flex items-center gap-3 p-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
+                  <span className="text-sm flex-1">{p.name || "Unnamed"}</span>
+                  <button
+                    className="text-xs px-2.5 py-1 rounded-full disabled:cursor-default"
+                    style={{ background: "rgba(255,255,255,0.06)", color: meta.color }}
+                    onClick={() => canEdit && cycleStatus(p.id, r.status)}
+                    disabled={!canEdit}
+                  >
+                    {meta.label}
+                  </button>
+                  {editable && (
+                    <label className="flex items-center gap-1.5 text-xs" style={{ color: "var(--muted)" }}>
+                      <input type="checkbox" checked={!!r.attended} onChange={() => toggleAttended(p.id, r.attended)} />
+                      Attended
+                    </label>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TeamCalendar({ team, editable, ownChildIds }) {
+  const [events, setEvents] = useState([]);
+  const [players, setPlayers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const [{ data: ev }, { data: pl }] = await Promise.all([
+      supabase.from("calendar_events").select("*").eq("team_id", team.id).order("date"),
+      supabase.from("players").select("id, name, number").eq("team_id", team.id),
+    ]);
+    setEvents(ev || []);
+    setPlayers(pl || []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [team.id]);
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <h1 className="font-display text-2xl tracking-wide">Calendar</h1>
+        {editable && !showForm && (
+          <button className="btn-accent px-4 py-2 rounded-lg text-sm" onClick={() => setShowForm(true)}>+ Add event</button>
+        )}
+      </div>
+      <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+        {editable ? "Add fixtures and training, mark attendance after each one." : "Tap your own child's RSVP to update it — everyone else's is view only."}
+      </p>
+
+      {showForm && (
+        <EventForm
+          teamId={team.id}
+          onCreated={(ev) => { setEvents((e) => [...e, ev].sort((a, b) => a.date.localeCompare(b.date))); setShowForm(false); }}
+          onCancel={() => setShowForm(false)}
+        />
+      )}
+
+      {loading ? (
+        <p style={{ color: "var(--muted)" }}>Loading…</p>
+      ) : events.length === 0 ? (
+        <div className="glass-panel p-10 text-center" style={{ color: "var(--muted)" }}>No events on the calendar yet.</div>
+      ) : (
+        <div className="space-y-3">
+          {events.map((ev) => (
+            <EventCard
+              key={ev.id}
+              event={ev}
+              players={players}
+              editable={editable}
+              ownChildIds={ownChildIds}
+              onDeleted={(id) => setEvents((e) => e.filter((x) => x.id !== id))}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CoachTeamPage({ profile, onSignOut }) {
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTeamId, setActiveTeamId] = useState(null);
+  const [activeTab, setActiveTab] = useState("team");
   const [openPlayer, setOpenPlayer] = useState(null);
   const [reloadRoster, setReloadRoster] = useState(null);
 
@@ -618,6 +862,23 @@ export default function CoachTeamPage({ profile, onSignOut }) {
         </button>
       </div>
 
+      {!openPlayer && (
+        <div className="flex gap-2 px-6 pt-4">
+          <button
+            className={activeTab === "team" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
+            onClick={() => setActiveTab("team")}
+          >
+            Team
+          </button>
+          <button
+            className={activeTab === "calendar" ? "btn-accent px-3 py-1.5 rounded-lg text-sm" : "btn-ghost px-3 py-1.5 rounded-lg text-sm"}
+            onClick={() => setActiveTab("calendar")}
+          >
+            Calendar
+          </button>
+        </div>
+      )}
+
       {openPlayer ? (
         <PlayerDetail
           player={openPlayer}
@@ -625,9 +886,12 @@ export default function CoachTeamPage({ profile, onSignOut }) {
           onSaved={() => closePlayer()}
           onDeleted={() => closePlayer()}
         />
+      ) : activeTab === "calendar" ? (
+        activeTeam && <TeamCalendar team={activeTeam} editable={true} />
       ) : (
         activeTeam && <TeamRoster team={activeTeam} onOpenPlayer={handleOpenPlayer} />
       )}
     </div>
   );
 }
+
