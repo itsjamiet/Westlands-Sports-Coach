@@ -717,7 +717,7 @@ function mapLink(location) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
 }
 
-function EventFields({ form, setForm, disableDate = false }) {
+function EventFields({ form, setForm }) {
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -738,8 +738,8 @@ function EventFields({ form, setForm, disableDate = false }) {
           <input className="input-dark w-full mt-1" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
         </div>
         <div>
-          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Date {disableDate && "(set per-event)"}</label>
-          <input type="date" className="input-dark w-full mt-1" value={form.date} disabled={disableDate} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Date</label>
+          <input type="date" className="input-dark w-full mt-1" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
         </div>
         <div>
           <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Time</label>
@@ -997,11 +997,37 @@ function EventCard({ event, players, editable, ownChildIds, onDeleted, onUpdated
     setEditError("");
 
     if (applyToSeries && event.recurrence_group_id) {
-      const { date, ...seriesFields } = editForm;
-      const { error } = await supabase.from("calendar_events").update(seriesFields).eq("recurrence_group_id", event.recurrence_group_id);
+      const { date: newDate, ...seriesFields } = editForm;
+      const deltaDays = Math.round(
+        (new Date(newDate + "T00:00:00") - new Date(event.date + "T00:00:00")) / (1000 * 60 * 60 * 24)
+      );
+
+      const { data: seriesEvents, error: fetchError } = await supabase
+        .from("calendar_events")
+        .select("id, date")
+        .eq("recurrence_group_id", event.recurrence_group_id);
+
+      if (fetchError) {
+        setSavingEdit(false);
+        setEditError(fetchError.message);
+        return;
+      }
+
+      const results = await Promise.all(
+        (seriesEvents || []).map((ev) => {
+          const shifted = new Date(ev.date + "T00:00:00");
+          shifted.setDate(shifted.getDate() + deltaDays);
+          return supabase
+            .from("calendar_events")
+            .update({ ...seriesFields, date: shifted.toISOString().slice(0, 10) })
+            .eq("id", ev.id);
+        })
+      );
+
       setSavingEdit(false);
-      if (error) {
-        setEditError(error.message);
+      const failed = results.find((r) => r.error);
+      if (failed) {
+        setEditError(failed.error.message);
         return;
       }
       setEditing(false);
@@ -1033,9 +1059,14 @@ function EventCard({ event, players, editable, ownChildIds, onDeleted, onUpdated
               <input type="radio" checked={applyToSeries} onChange={() => setApplyToSeries(true)} />
               This and all other events in the series
             </label>
+            {applyToSeries && (
+              <p className="text-xs mt-2" style={{ color: "var(--gold-light)" }}>
+                Changing the date will shift every event in the series by the same amount — e.g. moving this one from Monday to Tuesday moves the whole series to Tuesdays.
+              </p>
+            )}
           </div>
         )}
-        <EventFields form={editForm} setForm={setEditForm} disableDate={applyToSeries} />
+        <EventFields form={editForm} setForm={setEditForm} />
         {editError && <p className="text-sm" style={{ color: "#f28f8a" }}>{editError}</p>}
         <div className="flex gap-2">
           <button className="btn-accent px-4 py-2 rounded-lg text-sm" onClick={saveEdit} disabled={savingEdit || !editForm.date}>
