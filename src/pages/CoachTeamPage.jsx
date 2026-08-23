@@ -1180,6 +1180,7 @@ function TeamCalendar({ team, editable, ownChildIds }) {
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [view, setView] = useState("upcoming"); // "upcoming" | "previous"
 
   const load = async () => {
     setLoading(true);
@@ -1197,13 +1198,56 @@ function TeamCalendar({ team, editable, ownChildIds }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [team.id]);
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const upcomingEvents = events.filter((e) => e.date >= todayStr);
+  const previousEvents = events.filter((e) => e.date < todayStr).slice().sort((a, b) => b.date.localeCompare(a.date));
+  const shownEvents = view === "previous" ? previousEvents : upcomingEvents;
+
+  if (view === "previous") {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <button className="text-sm flex items-center gap-1 mb-6" style={{ color: "var(--muted)" }} onClick={() => setView("upcoming")}>
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to calendar
+        </button>
+        <h1 className="font-display text-2xl tracking-wide mb-2">Previous Events</h1>
+        <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+          Matches and training move here automatically once their date has passed.
+        </p>
+
+        {loading ? (
+          <p style={{ color: "var(--muted)" }}>Loading…</p>
+        ) : previousEvents.length === 0 ? (
+          <div className="glass-panel p-10 text-center" style={{ color: "var(--muted)" }}>No past events yet.</div>
+        ) : (
+          <div className="space-y-3">
+            {previousEvents.map((ev) => (
+              <EventCard
+                key={ev.id}
+                event={ev}
+                players={players}
+                editable={editable}
+                ownChildIds={ownChildIds}
+                onDeleted={(id) => setEvents((e) => e.filter((x) => x.id !== id))}
+                onUpdated={(updated) => setEvents((e) => e.map((x) => (x.id === updated.id ? updated : x)).sort((a, b) => a.date.localeCompare(b.date)))}
+                onReload={load}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
         <h1 className="font-display text-2xl tracking-wide">Calendar</h1>
-        {editable && !showForm && (
-          <button className="btn-accent px-4 py-2 rounded-lg text-sm" onClick={() => setShowForm(true)}>+ Add event</button>
-        )}
+        <div className="flex items-center gap-2">
+          <button className="btn-ghost px-4 py-2 rounded-lg text-sm" onClick={() => setView("previous")}>Previous</button>
+          {editable && !showForm && (
+            <button className="btn-accent px-4 py-2 rounded-lg text-sm" onClick={() => setShowForm(true)}>+ Add event</button>
+          )}
+        </div>
       </div>
       <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
         {editable ? "Add fixtures and training, mark attendance after each one." : "Tap your own child's RSVP to update it — everyone else's is view only."}
@@ -1219,11 +1263,11 @@ function TeamCalendar({ team, editable, ownChildIds }) {
 
       {loading ? (
         <p style={{ color: "var(--muted)" }}>Loading…</p>
-      ) : events.length === 0 ? (
-        <div className="glass-panel p-10 text-center" style={{ color: "var(--muted)" }}>No events on the calendar yet.</div>
+      ) : upcomingEvents.length === 0 ? (
+        <div className="glass-panel p-10 text-center" style={{ color: "var(--muted)" }}>No upcoming events on the calendar yet.</div>
       ) : (
         <div className="space-y-3">
-          {events.map((ev) => (
+          {upcomingEvents.map((ev) => (
             <EventCard
               key={ev.id}
               event={ev}
