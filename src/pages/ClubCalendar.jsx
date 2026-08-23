@@ -87,6 +87,11 @@ function ClubCalendarDay({ dateStr, teams, onBack }) {
                   >
                     Match vs {ev.opponent || "TBC"}
                   </span>
+                  {(ev.our_score !== null && ev.our_score !== undefined && ev.their_score !== null && ev.their_score !== undefined) && (
+                    <span className="font-display font-mono" style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--gold-light)" }}>
+                      {ev.our_score} - {ev.their_score}
+                    </span>
+                  )}
                   {ev.title && <span className="font-display text-base" style={{ color: "var(--muted)" }}>- {ev.title}</span>}
                 </div>
               ) : (
