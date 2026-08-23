@@ -717,14 +717,15 @@ function mapLink(location) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
 }
 
-function EventFields({ form, setForm }) {
+function EventFields({ form, setForm, disableDate = false }) {
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Type</label>
           <select
-            className="input-dark w-full mt-1"
+            className="w-full mt-1 rounded-lg px-2.5 py-2"
+            style={{ background: "#2E4E80", color: "white", border: "1px solid rgba(255,255,255,0.14)" }}
             value={form.type}
             onChange={(e) => setForm({ ...form, type: e.target.value, ...(e.target.value !== "match" ? { home_color: null, away_color: null } : {}) })}
           >
@@ -737,8 +738,8 @@ function EventFields({ form, setForm }) {
           <input className="input-dark w-full mt-1" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
         </div>
         <div>
-          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Date</label>
-          <input type="date" className="input-dark w-full mt-1" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Date {disableDate && "(set per-event)"}</label>
+          <input type="date" className="input-dark w-full mt-1" value={form.date} disabled={disableDate} onChange={(e) => setForm({ ...form, date: e.target.value })} />
         </div>
         <div>
           <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Time</label>
@@ -793,6 +794,31 @@ function EventFields({ form, setForm }) {
         </div>
       )}
 
+      {form.type === "match" && (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Score (us)</label>
+            <input
+              type="number"
+              className="input-dark w-full mt-1 font-mono"
+              placeholder="—"
+              value={form.our_score ?? ""}
+              onChange={(e) => setForm({ ...form, our_score: e.target.value === "" ? null : Number(e.target.value) })}
+            />
+          </div>
+          <div>
+            <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Score (them)</label>
+            <input
+              type="number"
+              className="input-dark w-full mt-1 font-mono"
+              placeholder="—"
+              value={form.their_score ?? ""}
+              onChange={(e) => setForm({ ...form, their_score: e.target.value === "" ? null : Number(e.target.value) })}
+            />
+          </div>
+        </div>
+      )}
+
       <div>
         <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Notes</label>
         <input className="input-dark w-full mt-1" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
@@ -800,6 +826,7 @@ function EventFields({ form, setForm }) {
     </>
   );
 }
+
 
 function generateRecurringDates(startDateStr, interval) {
   const start = new Date(startDateStr + "T00:00:00");
@@ -821,7 +848,7 @@ function generateRecurringDates(startDateStr, interval) {
 }
 
 function EventForm({ teamId, onCreated, onCancel }) {
-  const [form, setForm] = useState({ type: "training", title: "", date: "", time: "", location: "", opponent: "", notes: "", home_color: null, away_color: null, recurrence: "none" });
+  const [form, setForm] = useState({ type: "training", title: "", date: "", time: "", location: "", opponent: "", notes: "", home_color: null, away_color: null, our_score: null, their_score: null, recurrence: "none" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -829,22 +856,39 @@ function EventForm({ teamId, onCreated, onCancel }) {
     ? generateRecurringDates(form.date, form.recurrence)
     : null;
 
+  const populateWeeklyStats = async (matchDate, opponent) => {
+    const { data: teamPlayers } = await supabase.from("players").select("id, stats").eq("team_id", teamId);
+    await Promise.all((teamPlayers || []).map((p) => {
+      const newEntry = { id: uid(), date: matchDate, opponent: opponent || "", matchMinutes: 0, minutes: 0, goals: 0, tackles: 0, saves: 0, captain: false, potm: false };
+      const nextStats = [newEntry, ...(p.stats || [])];
+      return supabase.from("players").update({ stats: nextStats }).eq("id", p.id);
+    }));
+  };
+
   const save = async () => {
     if (!form.date) return;
     setSaving(true);
     setError("");
     const { recurrence, ...eventFields } = form;
+    const isRecurring = form.type === "training" && recurrence !== "none";
+    const groupId = isRecurring ? uid() : null;
 
-    const rows = form.type === "training" && recurrence !== "none"
-      ? generateRecurringDates(form.date, recurrence).map((date) => ({ team_id: teamId, ...eventFields, date }))
-      : [{ team_id: teamId, ...eventFields }];
+    const rows = isRecurring
+      ? generateRecurringDates(form.date, recurrence).map((date) => ({ team_id: teamId, ...eventFields, date, recurrence_group_id: groupId }))
+      : [{ team_id: teamId, ...eventFields, recurrence_group_id: null }];
 
     const { data, error } = await supabase.from("calendar_events").insert(rows).select();
-    setSaving(false);
     if (error) {
+      setSaving(false);
       setError(error.message);
       return;
     }
+
+    if (form.type === "match") {
+      await populateWeeklyStats(form.date, form.opponent);
+    }
+
+    setSaving(false);
     onCreated(data);
   };
 
@@ -855,7 +899,12 @@ function EventForm({ teamId, onCreated, onCancel }) {
       {form.type === "training" && (
         <div>
           <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Repeats</label>
-          <select className="input-dark w-full mt-1" value={form.recurrence} onChange={(e) => setForm({ ...form, recurrence: e.target.value })}>
+          <select
+            className="w-full mt-1 rounded-lg px-2.5 py-2"
+            style={{ background: "#2E4E80", color: "white", border: "1px solid rgba(255,255,255,0.14)" }}
+            value={form.recurrence}
+            onChange={(e) => setForm({ ...form, recurrence: e.target.value })}
+          >
             <option value="none">Does not repeat</option>
             <option value="weekly">Weekly</option>
             <option value="biweekly">Every 2 weeks</option>
@@ -869,6 +918,12 @@ function EventForm({ teamId, onCreated, onCancel }) {
         </div>
       )}
 
+      {form.type === "match" && (
+        <p className="text-xs" style={{ color: "var(--muted)" }}>
+          Saving this will add a blank week (with this date and opponent) to every player's stats — delete it for anyone who didn't play.
+        </p>
+      )}
+
       {error && <p className="text-sm" style={{ color: "#f28f8a" }}>{error}</p>}
       <div className="flex gap-2">
         <button className="btn-accent px-4 py-2 rounded-lg text-sm" onClick={save} disabled={saving || !form.date}>
@@ -880,11 +935,12 @@ function EventForm({ teamId, onCreated, onCancel }) {
   );
 }
 
-function EventCard({ event, players, editable, ownChildIds, onDeleted, onUpdated }) {
+function EventCard({ event, players, editable, ownChildIds, onDeleted, onUpdated, onReload }) {
   const [expanded, setExpanded] = useState(false);
   const [rsvps, setRsvps] = useState(null);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState(null);
+  const [applyToSeries, setApplyToSeries] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -928,7 +984,10 @@ function EventCard({ event, players, editable, ownChildIds, onDeleted, onUpdated
       notes: event.notes || "",
       home_color: event.home_color ?? null,
       away_color: event.away_color ?? null,
+      our_score: event.our_score ?? null,
+      their_score: event.their_score ?? null,
     });
+    setApplyToSeries(false);
     setEditError("");
     setEditing(true);
   };
@@ -936,6 +995,20 @@ function EventCard({ event, players, editable, ownChildIds, onDeleted, onUpdated
   const saveEdit = async () => {
     setSavingEdit(true);
     setEditError("");
+
+    if (applyToSeries && event.recurrence_group_id) {
+      const { date, ...seriesFields } = editForm;
+      const { error } = await supabase.from("calendar_events").update(seriesFields).eq("recurrence_group_id", event.recurrence_group_id);
+      setSavingEdit(false);
+      if (error) {
+        setEditError(error.message);
+        return;
+      }
+      setEditing(false);
+      if (onReload) onReload();
+      return;
+    }
+
     const { error } = await supabase.from("calendar_events").update(editForm).eq("id", event.id);
     setSavingEdit(false);
     if (error) {
@@ -949,7 +1022,20 @@ function EventCard({ event, players, editable, ownChildIds, onDeleted, onUpdated
   if (editing) {
     return (
       <div className="glass-card p-4 space-y-3">
-        <EventFields form={editForm} setForm={setEditForm} />
+        {event.recurrence_group_id && (
+          <div className="glass-card p-3" style={{ background: "rgba(255,255,255,0.04)" }}>
+            <div className="text-xs uppercase tracking-wide mb-2" style={{ color: "var(--muted)" }}>This is part of a recurring series</div>
+            <label className="flex items-center gap-2 text-sm mb-1">
+              <input type="radio" checked={!applyToSeries} onChange={() => setApplyToSeries(false)} />
+              This event only
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="radio" checked={applyToSeries} onChange={() => setApplyToSeries(true)} />
+              This and all other events in the series
+            </label>
+          </div>
+        )}
+        <EventFields form={editForm} setForm={setEditForm} disableDate={applyToSeries} />
         {editError && <p className="text-sm" style={{ color: "#f28f8a" }}>{editError}</p>}
         <div className="flex gap-2">
           <button className="btn-accent px-4 py-2 rounded-lg text-sm" onClick={saveEdit} disabled={savingEdit || !editForm.date}>
@@ -994,6 +1080,11 @@ function EventCard({ event, players, editable, ownChildIds, onDeleted, onUpdated
               >
                 Match vs {event.opponent || "TBC"}
               </span>
+              {(event.our_score !== null && event.our_score !== undefined && event.their_score !== null && event.their_score !== undefined) && (
+                <span className="font-display font-mono" style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--gold-light)" }}>
+                  {event.our_score} - {event.their_score}
+                </span>
+              )}
               {event.title && <span className="font-display text-base" style={{ color: "var(--muted)" }}>- {event.title}</span>}
             </div>
           ) : (
@@ -1141,6 +1232,7 @@ function TeamCalendar({ team, editable, ownChildIds }) {
               ownChildIds={ownChildIds}
               onDeleted={(id) => setEvents((e) => e.filter((x) => x.id !== id))}
               onUpdated={(updated) => setEvents((e) => e.map((x) => (x.id === updated.id ? updated : x)).sort((a, b) => a.date.localeCompare(b.date)))}
+              onReload={load}
             />
           ))}
         </div>
@@ -1268,7 +1360,8 @@ export default function CoachTeamPage({ profile, onSignOut }) {
           <Shield className="w-5 h-5" style={{ color: "var(--accent)" }} />
           {teams.length > 1 ? (
             <select
-              className="input-dark text-sm py-1.5"
+              className="text-sm py-1.5 px-2 rounded-lg"
+              style={{ background: "#2E4E80", color: "white", border: "1px solid rgba(255,255,255,0.14)" }}
               value={activeTeamId}
               onChange={(e) => setActiveTeamId(e.target.value)}
             >
