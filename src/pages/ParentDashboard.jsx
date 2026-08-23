@@ -228,12 +228,17 @@ function PlayerView({ player, isOwnChild, onBack }) {
   );
 }
 
-const RSVP_STATUSES = {
-  pending: { label: "Pending", color: "var(--muted)" },
-  attending: { label: "Attending", color: "#1FB65A" },
-  not_attending: { label: "Not attending", color: "#E8433D" },
-};
-const RSVP_ORDER = ["pending", "attending", "not_attending"];
+function KitIcon({ color, size = 28 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color || "#888"} stroke="rgba(255,255,255,0.6)" strokeWidth="0.6">
+      <path d="M8 2.5 L2 6 L4.5 10 L7 8.3 V21 H17 V8.3 L19.5 10 L22 6 L16 2.5 C15 4 13.6 5 12 5 C10.4 5 9 4 8 2.5 Z" />
+    </svg>
+  );
+}
+
+function mapLink(location) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
+}
 
 function ParentEventCard({ event, players, ownChildIds }) {
   const [expanded, setExpanded] = useState(false);
@@ -252,30 +257,47 @@ function ParentEventCard({ event, players, ownChildIds }) {
     if (next && !rsvps) loadRsvps();
   };
 
-  const cycleStatus = async (playerId, current) => {
+  const setStatus = async (playerId, status) => {
     if (!ownChildIds.has(playerId)) return;
-    const next = RSVP_ORDER[(RSVP_ORDER.indexOf(current || "pending") + 1) % RSVP_ORDER.length];
-    const { error } = await supabase.rpc("submit_rsvp", { p_event_id: event.id, p_player_id: playerId, p_status: next });
+    const { error } = await supabase.rpc("submit_rsvp", { p_event_id: event.id, p_player_id: playerId, p_status: status });
     if (!error) loadRsvps();
   };
 
   return (
     <div className="glass-card p-4">
-      <button className="w-full text-left" onClick={toggle}>
-        <span
-          className="text-xs px-2 py-0.5 rounded-full font-medium inline-block mb-1"
-          style={{ background: event.type === "match" ? "rgba(232,67,61,0.18)" : "rgba(46,124,246,0.18)", color: event.type === "match" ? "#f28f8a" : "#8fb8ff" }}
-        >
-          {event.type === "match" ? "Match" : "Training"}
-        </span>
+      <div className="cursor-pointer" onClick={toggle}>
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          <span
+            className="text-xs px-2 py-0.5 rounded-full font-medium"
+            style={{ background: event.type === "match" ? "rgba(232,67,61,0.18)" : "rgba(46,124,246,0.18)", color: event.type === "match" ? "#f28f8a" : "#8fb8ff" }}
+          >
+            {event.type === "match" ? "Match" : "Training"}
+          </span>
+          {event.type === "match" && (event.home_color || event.away_color) && (
+            <span className="flex items-center gap-1">
+              {event.home_color && <KitIcon color={event.home_color} size={18} />}
+              {event.away_color && <KitIcon color={event.away_color} size={18} />}
+            </span>
+          )}
+        </div>
         <div className="font-display text-lg tracking-wide">
           {event.title || (event.type === "match" ? `vs ${event.opponent || "TBC"}` : "Training session")}
         </div>
         <div className="text-xs mt-1 flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: "var(--muted)" }}>
           <span>{event.date}{event.time ? ` · ${event.time}` : ""}</span>
-          {event.location && <span>{event.location}</span>}
+          {event.location && (
+            <a
+              href={mapLink(event.location)}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              style={{ color: "var(--accent)", textDecoration: "underline" }}
+            >
+              {event.location}
+            </a>
+          )}
         </div>
-      </button>
+      </div>
 
       {expanded && (
         <div className="mt-4 pt-4 space-y-1.5" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
@@ -285,18 +307,31 @@ function ParentEventCard({ event, players, ownChildIds }) {
           ) : (
             players.map((p) => {
               const r = rsvps[p.id] || { status: "pending" };
-              const meta = RSVP_STATUSES[r.status] || RSVP_STATUSES.pending;
               const isOwn = ownChildIds.has(p.id);
               return (
-                <div key={p.id} className="flex items-center gap-3 p-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
-                  <span className="text-sm flex-1">{p.name || "Unnamed"}{isOwn ? " (your child)" : ""}</span>
+                <div key={p.id} className="flex items-center gap-2 p-2 rounded-lg flex-wrap" style={{ background: "rgba(255,255,255,0.03)" }}>
+                  <span className="text-sm flex-1 min-w-[100px]">{p.name || "Unnamed"}{isOwn ? " (your child)" : ""}</span>
                   <button
-                    className="text-xs px-2.5 py-1 rounded-full disabled:cursor-default"
-                    style={{ background: "rgba(255,255,255,0.06)", color: meta.color }}
-                    onClick={() => cycleStatus(p.id, r.status)}
+                    className="text-xs px-3 py-1.5 rounded-full font-medium disabled:cursor-default"
+                    style={{
+                      background: r.status === "attending" ? "#1FB65A" : "rgba(255,255,255,0.06)",
+                      color: r.status === "attending" ? "#0b1223" : "var(--muted)",
+                    }}
+                    onClick={() => setStatus(p.id, "attending")}
                     disabled={!isOwn}
                   >
-                    {meta.label}
+                    Attend
+                  </button>
+                  <button
+                    className="text-xs px-3 py-1.5 rounded-full font-medium disabled:cursor-default"
+                    style={{
+                      background: r.status === "not_attending" ? "#E8433D" : "rgba(255,255,255,0.06)",
+                      color: r.status === "not_attending" ? "white" : "var(--muted)",
+                    }}
+                    onClick={() => setStatus(p.id, "not_attending")}
+                    disabled={!isOwn}
+                  >
+                    Decline
                   </button>
                 </div>
               );
