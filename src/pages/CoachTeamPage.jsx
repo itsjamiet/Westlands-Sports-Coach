@@ -871,7 +871,7 @@ function EventForm({ teamId, onCreated, onCancel }) {
     setError("");
     const { recurrence, ...eventFields } = form;
     const isRecurring = form.type === "training" && recurrence !== "none";
-    const groupId = isRecurring ? uid() : null;
+    const groupId = isRecurring ? crypto.randomUUID() : null;
 
     const rows = isRecurring
       ? generateRecurringDates(form.date, recurrence).map((date) => ({ team_id: teamId, ...eventFields, date, recurrence_group_id: groupId }))
