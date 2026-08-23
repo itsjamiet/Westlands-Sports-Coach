@@ -280,9 +280,26 @@ function ParentEventCard({ event, players, ownChildIds }) {
             </span>
           )}
         </div>
-        <div className="font-display text-lg tracking-wide">
-          {event.title || (event.type === "match" ? `vs ${event.opponent || "TBC"}` : "Training session")}
-        </div>
+        {event.type === "match" ? (
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span
+              className="font-display"
+              style={{
+                fontSize: "1.6rem",
+                fontWeight: 800,
+                background: "linear-gradient(180deg, #ffffff 0%, var(--accent) 55%, var(--accent-dark) 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.35))",
+              }}
+            >
+              Match vs {event.opponent || "TBC"}
+            </span>
+            {event.title && <span className="font-display text-base" style={{ color: "var(--muted)" }}>- {event.title}</span>}
+          </div>
+        ) : (
+          <div className="font-display text-lg tracking-wide">{event.title || "Training session"}</div>
+        )}
         <div className="text-xs mt-1 flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: "var(--muted)" }}>
           <span>{event.date}{event.time ? ` · ${event.time}` : ""}</span>
           {event.location && (
