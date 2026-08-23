@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { Shield, LogOut, Plus, Users, Trash2, ArrowLeft, Upload, FileText, Palette } from "lucide-react";
 import { supabase } from "../lib/supabaseClient.js";
+
+function toDateString(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 import ClubCalendarTab from "./ClubCalendar.jsx";
 import DropdownMenu, { DropdownItem } from "../components/DropdownMenu.jsx";
 
@@ -187,7 +194,7 @@ function useAttendanceStats(teamId, playerId) {
   const [attendance, setAttendance] = useState(null);
   useEffect(() => {
     if (!teamId || !playerId) return;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = toDateString(new Date());
     (async () => {
       const { data: events } = await supabase.from("calendar_events").select("id, type, date").eq("team_id", teamId).lt("date", todayStr);
       if (!events || events.length === 0) {
