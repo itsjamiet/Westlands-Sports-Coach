@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Shield, LogOut, Plus, Users, ArrowLeft, Camera, Trash2, Circle, ArrowUpRight, Eraser } from "lucide-react";
+import { Shield, LogOut, Plus, Users, ArrowLeft, Camera, Trash2, Circle, ArrowUpRight, Eraser, Pencil } from "lucide-react";
 import { supabase } from "../lib/supabaseClient.js";
 import MatchDayView from "./MatchDay.jsx";
 import DocumentsView from "./Documents.jsx";
@@ -717,26 +717,9 @@ function mapLink(location) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
 }
 
-function EventForm({ teamId, onCreated, onCancel }) {
-  const [form, setForm] = useState({ type: "training", title: "", date: "", time: "", location: "", opponent: "", notes: "", home_color: null, away_color: null });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  const save = async () => {
-    if (!form.date) return;
-    setSaving(true);
-    setError("");
-    const { data, error } = await supabase.from("calendar_events").insert({ team_id: teamId, ...form }).select().single();
-    setSaving(false);
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    onCreated(data);
-  };
-
+function EventFields({ form, setForm }) {
   return (
-    <div className="glass-panel p-5 mb-6 space-y-3">
+    <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Type</label>
@@ -814,6 +797,31 @@ function EventForm({ teamId, onCreated, onCancel }) {
         <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Notes</label>
         <input className="input-dark w-full mt-1" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
       </div>
+    </>
+  );
+}
+
+function EventForm({ teamId, onCreated, onCancel }) {
+  const [form, setForm] = useState({ type: "training", title: "", date: "", time: "", location: "", opponent: "", notes: "", home_color: null, away_color: null });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const save = async () => {
+    if (!form.date) return;
+    setSaving(true);
+    setError("");
+    const { data, error } = await supabase.from("calendar_events").insert({ team_id: teamId, ...form }).select().single();
+    setSaving(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    onCreated(data);
+  };
+
+  return (
+    <div className="glass-panel p-5 mb-6 space-y-3">
+      <EventFields form={form} setForm={setForm} />
       {error && <p className="text-sm" style={{ color: "#f28f8a" }}>{error}</p>}
       <div className="flex gap-2">
         <button className="btn-accent px-4 py-2 rounded-lg text-sm" onClick={save} disabled={saving || !form.date}>
@@ -825,9 +833,13 @@ function EventForm({ teamId, onCreated, onCancel }) {
   );
 }
 
-function EventCard({ event, players, editable, ownChildIds, onDeleted }) {
+function EventCard({ event, players, editable, ownChildIds, onDeleted, onUpdated }) {
   const [expanded, setExpanded] = useState(false);
   const [rsvps, setRsvps] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState("");
 
   const loadRsvps = async () => {
     const { data } = await supabase.from("rsvps").select("*").eq("event_id", event.id);
@@ -857,6 +869,50 @@ function EventCard({ event, players, editable, ownChildIds, onDeleted }) {
     await supabase.from("calendar_events").delete().eq("id", event.id);
     onDeleted(event.id);
   };
+
+  const startEdit = () => {
+    setEditForm({
+      type: event.type,
+      title: event.title || "",
+      date: event.date,
+      time: event.time || "",
+      location: event.location || "",
+      opponent: event.opponent || "",
+      notes: event.notes || "",
+      home_color: event.home_color ?? null,
+      away_color: event.away_color ?? null,
+    });
+    setEditError("");
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    setSavingEdit(true);
+    setEditError("");
+    const { error } = await supabase.from("calendar_events").update(editForm).eq("id", event.id);
+    setSavingEdit(false);
+    if (error) {
+      setEditError(error.message);
+      return;
+    }
+    onUpdated({ ...event, ...editForm });
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="glass-card p-4 space-y-3">
+        <EventFields form={editForm} setForm={setEditForm} />
+        {editError && <p className="text-sm" style={{ color: "#f28f8a" }}>{editError}</p>}
+        <div className="flex gap-2">
+          <button className="btn-accent px-4 py-2 rounded-lg text-sm" onClick={saveEdit} disabled={savingEdit || !editForm.date}>
+            {savingEdit ? "Saving…" : "Save changes"}
+          </button>
+          <button className="btn-ghost px-4 py-2 rounded-lg text-sm" onClick={() => setEditing(false)}>Cancel</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="glass-card p-4">
@@ -895,9 +951,14 @@ function EventCard({ event, players, editable, ownChildIds, onDeleted }) {
           </div>
         </div>
         {editable && (
-          <button className="opacity-50 hover:opacity-100 flex-shrink-0" onClick={deleteEvent}>
-            <Trash2 className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button className="opacity-50 hover:opacity-100" onClick={startEdit} title="Edit event">
+              <Pencil className="w-4 h-4" />
+            </button>
+            <button className="opacity-50 hover:opacity-100" onClick={deleteEvent} title="Delete event">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         )}
       </div>
 
@@ -1015,6 +1076,7 @@ function TeamCalendar({ team, editable, ownChildIds }) {
               editable={editable}
               ownChildIds={ownChildIds}
               onDeleted={(id) => setEvents((e) => e.filter((x) => x.id !== id))}
+              onUpdated={(updated) => setEvents((e) => e.map((x) => (x.id === updated.id ? updated : x)).sort((a, b) => a.date.localeCompare(b.date)))}
             />
           ))}
         </div>
