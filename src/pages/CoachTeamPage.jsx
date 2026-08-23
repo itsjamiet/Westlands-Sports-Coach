@@ -996,53 +996,73 @@ function EventCard({ event, players, editable, ownChildIds, onDeleted, onUpdated
     setSavingEdit(true);
     setEditError("");
 
-    if (applyToSeries && event.recurrence_group_id) {
-      const { date: newDate, ...seriesFields } = editForm;
-      const deltaDays = Math.round(
-        (new Date(newDate + "T00:00:00") - new Date(event.date + "T00:00:00")) / (1000 * 60 * 60 * 24)
-      );
+    try {
+      if (applyToSeries && event.recurrence_group_id) {
+        const { date: newDate, ...seriesFields } = editForm;
+        const deltaDays = Math.round(
+          (new Date(newDate + "T00:00:00") - new Date(event.date + "T00:00:00")) / (1000 * 60 * 60 * 24)
+        );
 
-      const { data: seriesEvents, error: fetchError } = await supabase
-        .from("calendar_events")
-        .select("id, date")
-        .eq("recurrence_group_id", event.recurrence_group_id);
+        const { data: seriesEvents, error: fetchError } = await supabase
+          .from("calendar_events")
+          .select("id, date")
+          .eq("recurrence_group_id", event.recurrence_group_id);
 
-      if (fetchError) {
-        setSavingEdit(false);
-        setEditError(fetchError.message);
+        if (fetchError) {
+          setEditError(fetchError.message);
+          return;
+        }
+        if (!seriesEvents || seriesEvents.length === 0) {
+          setEditError("Couldn't find the other events in this series — try refreshing the page and editing again.");
+          return;
+        }
+
+        const results = await Promise.all(
+          seriesEvents.map((ev) => {
+            const shifted = new Date(ev.date + "T00:00:00");
+            shifted.setDate(shifted.getDate() + deltaDays);
+            return supabase
+              .from("calendar_events")
+              .update({ ...seriesFields, date: shifted.toISOString().slice(0, 10) })
+              .eq("id", ev.id)
+              .select();
+          })
+        );
+
+        const failed = results.find((r) => r.error);
+        if (failed) {
+          setEditError(failed.error.message);
+          return;
+        }
+
+        const noRowsUpdated = results.filter((r) => !r.data || r.data.length === 0).length;
+        if (noRowsUpdated > 0) {
+          setEditError(`${noRowsUpdated} of ${results.length} events in the series didn't update — this usually means a permissions issue. Try logging out and back in, then edit again.`);
+          if (onReload) onReload();
+          return;
+        }
+
+        setEditing(false);
+        if (onReload) onReload();
         return;
       }
 
-      const results = await Promise.all(
-        (seriesEvents || []).map((ev) => {
-          const shifted = new Date(ev.date + "T00:00:00");
-          shifted.setDate(shifted.getDate() + deltaDays);
-          return supabase
-            .from("calendar_events")
-            .update({ ...seriesFields, date: shifted.toISOString().slice(0, 10) })
-            .eq("id", ev.id);
-        })
-      );
-
-      setSavingEdit(false);
-      const failed = results.find((r) => r.error);
-      if (failed) {
-        setEditError(failed.error.message);
+      const { data: updatedRows, error } = await supabase.from("calendar_events").update(editForm).eq("id", event.id).select();
+      if (error) {
+        setEditError(error.message);
         return;
       }
+      if (!updatedRows || updatedRows.length === 0) {
+        setEditError("That change didn't save — this usually means a permissions issue. Try logging out and back in, then edit again.");
+        return;
+      }
+      onUpdated({ ...event, ...editForm });
       setEditing(false);
-      if (onReload) onReload();
-      return;
+    } catch (err) {
+      setEditError(err?.message || "Something went wrong saving these changes.");
+    } finally {
+      setSavingEdit(false);
     }
-
-    const { error } = await supabase.from("calendar_events").update(editForm).eq("id", event.id);
-    setSavingEdit(false);
-    if (error) {
-      setEditError(error.message);
-      return;
-    }
-    onUpdated({ ...event, ...editForm });
-    setEditing(false);
   };
 
   if (editing) {
