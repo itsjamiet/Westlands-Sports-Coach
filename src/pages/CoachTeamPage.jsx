@@ -705,15 +705,20 @@ function TeamRoster({ team, onOpenPlayer }) {
   );
 }
 
-const RSVP_STATUSES = {
-  pending: { label: "Pending", color: "var(--muted)" },
-  attending: { label: "Attending", color: "#1FB65A" },
-  not_attending: { label: "Not attending", color: "#E8433D" },
-};
-const RSVP_ORDER = ["pending", "attending", "not_attending"];
+function KitIcon({ color, size = 28 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color || "#888"} stroke="rgba(255,255,255,0.6)" strokeWidth="0.6">
+      <path d="M8 2.5 L2 6 L4.5 10 L7 8.3 V21 H17 V8.3 L19.5 10 L22 6 L16 2.5 C15 4 13.6 5 12 5 C10.4 5 9 4 8 2.5 Z" />
+    </svg>
+  );
+}
+
+function mapLink(location) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
+}
 
 function EventForm({ teamId, onCreated, onCancel }) {
-  const [form, setForm] = useState({ type: "training", title: "", date: "", time: "", location: "", opponent: "", notes: "" });
+  const [form, setForm] = useState({ type: "training", title: "", date: "", time: "", location: "", opponent: "", notes: "", home_color: "#2E7CF6", away_color: "#E8433D" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -753,8 +758,8 @@ function EventForm({ teamId, onCreated, onCancel }) {
           <input type="time" className="input-dark w-full mt-1" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
         </div>
         <div>
-          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Location</label>
-          <input className="input-dark w-full mt-1" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Location (address)</label>
+          <input className="input-dark w-full mt-1" placeholder="e.g. Recreation Ground, Main St" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
         </div>
         {form.type === "match" && (
           <div>
@@ -763,6 +768,24 @@ function EventForm({ teamId, onCreated, onCancel }) {
           </div>
         )}
       </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Home strip</label>
+          <div className="flex items-center gap-2 mt-1">
+            <KitIcon color={form.home_color} />
+            <input type="color" value={form.home_color} onChange={(e) => setForm({ ...form, home_color: e.target.value })} className="w-10 h-9 rounded-lg border border-white/10 bg-transparent" />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Away strip</label>
+          <div className="flex items-center gap-2 mt-1">
+            <KitIcon color={form.away_color} />
+            <input type="color" value={form.away_color} onChange={(e) => setForm({ ...form, away_color: e.target.value })} className="w-10 h-9 rounded-lg border border-white/10 bg-transparent" />
+          </div>
+        </div>
+      </div>
+
       <div>
         <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Notes</label>
         <input className="input-dark w-full mt-1" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
@@ -795,15 +818,8 @@ function EventCard({ event, players, editable, ownChildIds, onDeleted }) {
     if (next && !rsvps) loadRsvps();
   };
 
-  const cycleStatus = async (playerId, current) => {
-    const next = RSVP_ORDER[(RSVP_ORDER.indexOf(current || "pending") + 1) % RSVP_ORDER.length];
-    if (editable) {
-      await supabase.from("rsvps").upsert({ event_id: event.id, player_id: playerId, status: next }, { onConflict: "event_id,player_id" });
-    } else if (ownChildIds?.has(playerId)) {
-      await supabase.rpc("submit_rsvp", { p_event_id: event.id, p_player_id: playerId, p_status: next });
-    } else {
-      return;
-    }
+  const setStatus = async (playerId, status) => {
+    await supabase.from("rsvps").upsert({ event_id: event.id, player_id: playerId, status }, { onConflict: "event_id,player_id" });
     loadRsvps();
   };
 
@@ -821,7 +837,7 @@ function EventCard({ event, players, editable, ownChildIds, onDeleted }) {
   return (
     <div className="glass-card p-4">
       <div className="flex items-start justify-between gap-3">
-        <button className="flex-1 text-left" onClick={toggle}>
+        <div className="flex-1 text-left cursor-pointer" onClick={toggle}>
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span
               className="text-xs px-2 py-0.5 rounded-full font-medium"
@@ -829,15 +845,31 @@ function EventCard({ event, players, editable, ownChildIds, onDeleted }) {
             >
               {event.type === "match" ? "Match" : "Training"}
             </span>
+            {event.type === "match" && (event.home_color || event.away_color) && (
+              <span className="flex items-center gap-1">
+                {event.home_color && <KitIcon color={event.home_color} size={18} />}
+                {event.away_color && <KitIcon color={event.away_color} size={18} />}
+              </span>
+            )}
           </div>
           <div className="font-display text-lg tracking-wide">
             {event.title || (event.type === "match" ? `vs ${event.opponent || "TBC"}` : "Training session")}
           </div>
           <div className="text-xs mt-1 flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: "var(--muted)" }}>
             <span>{event.date}{event.time ? ` · ${event.time}` : ""}</span>
-            {event.location && <span>{event.location}</span>}
+            {event.location && (
+              <a
+                href={mapLink(event.location)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                style={{ color: "var(--accent)", textDecoration: "underline" }}
+              >
+                {event.location}
+              </a>
+            )}
           </div>
-        </button>
+        </div>
         {editable && (
           <button className="opacity-50 hover:opacity-100 flex-shrink-0" onClick={deleteEvent}>
             <Trash2 className="w-4 h-4" />
@@ -855,24 +887,43 @@ function EventCard({ event, players, editable, ownChildIds, onDeleted }) {
           ) : (
             players.map((p) => {
               const r = rsvps[p.id] || { status: "pending", attended: false };
-              const meta = RSVP_STATUSES[r.status] || RSVP_STATUSES.pending;
               const canEdit = editable || ownChildIds?.has(p.id);
               return (
-                <div key={p.id} className="flex items-center gap-3 p-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
-                  <span className="text-sm flex-1">{p.name || "Unnamed"}</span>
+                <div key={p.id} className="flex items-center gap-2 p-2 rounded-lg flex-wrap" style={{ background: "rgba(255,255,255,0.03)" }}>
+                  <span className="text-sm flex-1 min-w-[100px]">{p.name || "Unnamed"}</span>
                   <button
-                    className="text-xs px-2.5 py-1 rounded-full disabled:cursor-default"
-                    style={{ background: "rgba(255,255,255,0.06)", color: meta.color }}
-                    onClick={() => canEdit && cycleStatus(p.id, r.status)}
+                    className="text-xs px-3 py-1.5 rounded-full font-medium disabled:cursor-default"
+                    style={{
+                      background: r.status === "attending" ? "#1FB65A" : "rgba(255,255,255,0.06)",
+                      color: r.status === "attending" ? "#0b1223" : "var(--muted)",
+                    }}
+                    onClick={() => canEdit && setStatus(p.id, "attending")}
                     disabled={!canEdit}
                   >
-                    {meta.label}
+                    Attend
+                  </button>
+                  <button
+                    className="text-xs px-3 py-1.5 rounded-full font-medium disabled:cursor-default"
+                    style={{
+                      background: r.status === "not_attending" ? "#E8433D" : "rgba(255,255,255,0.06)",
+                      color: r.status === "not_attending" ? "white" : "var(--muted)",
+                    }}
+                    onClick={() => canEdit && setStatus(p.id, "not_attending")}
+                    disabled={!canEdit}
+                  >
+                    Decline
                   </button>
                   {editable && (
-                    <label className="flex items-center gap-1.5 text-xs" style={{ color: "var(--muted)" }}>
-                      <input type="checkbox" checked={!!r.attended} onChange={() => toggleAttended(p.id, r.attended)} />
+                    <button
+                      className="text-xs px-3 py-1.5 rounded-full font-medium"
+                      style={{
+                        background: r.attended ? "var(--accent)" : "rgba(255,255,255,0.06)",
+                        color: r.attended ? "white" : "var(--muted)",
+                      }}
+                      onClick={() => toggleAttended(p.id, r.attended)}
+                    >
                       Attended
-                    </label>
+                    </button>
                   )}
                 </div>
               );
