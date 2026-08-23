@@ -2,6 +2,13 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { supabase } from "../lib/supabaseClient.js";
 
+function toDateString(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function KitIcon({ color, size = 18 }) {
@@ -120,7 +127,7 @@ function ClubCalendarDay({ dateStr, teams, onBack }) {
 }
 
 export default function ClubCalendarTab({ teams }) {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = toDateString(new Date());
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
