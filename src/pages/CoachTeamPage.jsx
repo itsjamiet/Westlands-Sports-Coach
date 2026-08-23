@@ -718,7 +718,7 @@ function mapLink(location) {
 }
 
 function EventForm({ teamId, onCreated, onCancel }) {
-  const [form, setForm] = useState({ type: "training", title: "", date: "", time: "", location: "", opponent: "", notes: "", home_color: "#2E7CF6", away_color: "#E8433D" });
+  const [form, setForm] = useState({ type: "training", title: "", date: "", time: "", location: "", opponent: "", notes: "", home_color: null, away_color: null });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -740,7 +740,11 @@ function EventForm({ teamId, onCreated, onCancel }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Type</label>
-          <select className="input-dark w-full mt-1" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+          <select
+            className="input-dark w-full mt-1"
+            value={form.type}
+            onChange={(e) => setForm({ ...form, type: e.target.value, ...(e.target.value !== "match" ? { home_color: null, away_color: null } : {}) })}
+          >
             <option value="training">Training</option>
             <option value="match">Match</option>
           </select>
@@ -769,22 +773,42 @@ function EventForm({ teamId, onCreated, onCancel }) {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Home strip</label>
-          <div className="flex items-center gap-2 mt-1">
-            <KitIcon color={form.home_color} />
-            <input type="color" value={form.home_color} onChange={(e) => setForm({ ...form, home_color: e.target.value })} className="w-10 h-9 rounded-lg border border-white/10 bg-transparent" />
+      {form.type === "match" && (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="flex items-center gap-2 text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+              <input
+                type="checkbox"
+                checked={form.home_color !== null}
+                onChange={(e) => setForm({ ...form, home_color: e.target.checked ? "#2E7CF6" : null })}
+              />
+              Home strip
+            </label>
+            {form.home_color !== null && (
+              <div className="flex items-center gap-2 mt-1">
+                <KitIcon color={form.home_color} />
+                <input type="color" value={form.home_color} onChange={(e) => setForm({ ...form, home_color: e.target.value })} className="w-10 h-9 rounded-lg border border-white/10 bg-transparent" />
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="flex items-center gap-2 text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+              <input
+                type="checkbox"
+                checked={form.away_color !== null}
+                onChange={(e) => setForm({ ...form, away_color: e.target.checked ? "#E8433D" : null })}
+              />
+              Away strip
+            </label>
+            {form.away_color !== null && (
+              <div className="flex items-center gap-2 mt-1">
+                <KitIcon color={form.away_color} />
+                <input type="color" value={form.away_color} onChange={(e) => setForm({ ...form, away_color: e.target.value })} className="w-10 h-9 rounded-lg border border-white/10 bg-transparent" />
+              </div>
+            )}
           </div>
         </div>
-        <div>
-          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Away strip</label>
-          <div className="flex items-center gap-2 mt-1">
-            <KitIcon color={form.away_color} />
-            <input type="color" value={form.away_color} onChange={(e) => setForm({ ...form, away_color: e.target.value })} className="w-10 h-9 rounded-lg border border-white/10 bg-transparent" />
-          </div>
-        </div>
-      </div>
+      )}
 
       <div>
         <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Notes</label>
