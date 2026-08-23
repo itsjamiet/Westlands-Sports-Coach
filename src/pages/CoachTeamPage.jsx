@@ -112,6 +112,16 @@ const PLAN_STATUSES = [
   { id: "mastered", label: "Mastered", color: "#1FB65A" },
 ];
 
+// Formats a Date using its LOCAL calendar day, never toISOString() (which
+// converts to UTC first and can roll the date back a day for anyone in a
+// timezone ahead of UTC, e.g. UK British Summer Time).
+function toDateString(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
@@ -351,7 +361,7 @@ function useAttendanceStats(teamId, playerId) {
   const [attendance, setAttendance] = useState(null);
   useEffect(() => {
     if (!teamId || !playerId) return;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = toDateString(new Date());
     (async () => {
       const { data: events } = await supabase.from("calendar_events").select("id, type, date").eq("team_id", teamId).lt("date", todayStr);
       if (!events || events.length === 0) {
@@ -427,7 +437,7 @@ function WeeklyStatsEditor({ playerId, teamId }) {
 
   const addWeek = () => {
     const next = [
-      { id: uid(), date: new Date().toISOString().slice(0, 10), opponent: "", matchMinutes: 0, minutes: 0, goals: 0, tackles: 0, saves: 0, captain: false, potm: false },
+      { id: uid(), date: toDateString(new Date()), opponent: "", matchMinutes: 0, minutes: 0, goals: 0, tackles: 0, saves: 0, captain: false, potm: false },
       ...stats,
     ];
     setStats(next);
@@ -837,7 +847,7 @@ function generateRecurringDates(startDateStr, interval) {
   let current = new Date(start);
   let guard = 0;
   while (current <= end && guard < 60) {
-    dates.push(current.toISOString().slice(0, 10));
+    dates.push(toDateString(current));
     if (interval === "weekly") current.setDate(current.getDate() + 7);
     else if (interval === "biweekly") current.setDate(current.getDate() + 14);
     else if (interval === "monthly") current.setMonth(current.getMonth() + 1);
@@ -1023,7 +1033,7 @@ function EventCard({ event, players, editable, ownChildIds, onDeleted, onUpdated
             shifted.setDate(shifted.getDate() + deltaDays);
             return supabase
               .from("calendar_events")
-              .update({ ...seriesFields, date: shifted.toISOString().slice(0, 10) })
+              .update({ ...seriesFields, date: toDateString(shifted) })
               .eq("id", ev.id)
               .select();
           })
@@ -1249,7 +1259,7 @@ function TeamCalendar({ team, editable, ownChildIds }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [team.id]);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = toDateString(new Date());
   const upcomingEvents = events.filter((e) => e.date >= todayStr);
   const previousEvents = events.filter((e) => e.date < todayStr).slice().sort((a, b) => b.date.localeCompare(a.date));
   const shownEvents = view === "previous" ? previousEvents : upcomingEvents;
