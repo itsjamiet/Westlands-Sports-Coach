@@ -18,6 +18,13 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+function shortLabel(name) {
+  const parts = (name || "?").trim().split(" ").filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]} ${parts[1][0]}`;
+}
+
 function buildSegments(breakdown) {
   const count = BREAKDOWN_COUNTS[breakdown];
   const labels = BREAKDOWN_LABELS[breakdown];
@@ -113,7 +120,7 @@ function MatchDayPitch({ segment, players, formatSize, editable, onToggleSelecti
                 setDragId(p.id);
               }}
             >
-              <text x={pos.x} y={pos.y - 3.5} textAnchor="middle" fontSize="4.2" fill="white" fontWeight="700">{p.number || "?"}</text>
+              <text x={pos.x} y={pos.y - 3.5} textAnchor="middle" fontSize="3.2" fill="white" fontWeight="700">{shortLabel(p.name)}</text>
               <circle cx={pos.x} cy={pos.y} r="3.4" fill="#2E7CF6" stroke="white" strokeWidth="0.5" />
             </g>
           );
