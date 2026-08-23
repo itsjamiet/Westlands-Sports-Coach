@@ -18,6 +18,39 @@ function fileToDataUrl(file) {
   });
 }
 
+// Resizes and compresses a photo before upload. iPhone photos are often
+// several MB (sometimes 10+ MB) and can be in HEIC format -- both can
+// cause the upload to silently fail. This shrinks the image and always
+// re-encodes it as a JPEG, which fixes both problems at once.
+function resizeImage(file, maxDimension = 800, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxDimension) {
+          height = Math.round((height * maxDimension) / width);
+          width = maxDimension;
+        } else if (height >= width && height > maxDimension) {
+          width = Math.round((width * maxDimension) / height);
+          height = maxDimension;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => reject(new Error("Couldn't read that image."));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error("Couldn't read that file."));
+    reader.readAsDataURL(file);
+  });
+}
+
 function sortByNumber(players) {
   return [...players].sort((a, b) => {
     const na = a.number === "" || a.number === null || a.number === undefined ? Infinity : Number(a.number);
@@ -539,6 +572,7 @@ function PlayerDetail({ player, onBack, onSaved, onDeleted }) {
     position: player.position || "GK",
   });
   const [photoUrl, setPhotoUrl] = useState(player.photo_url || "");
+  const [photoError, setPhotoError] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [showInviteParent, setShowInviteParent] = useState(false);
@@ -546,23 +580,33 @@ function PlayerDetail({ player, onBack, onSaved, onDeleted }) {
   const handlePhoto = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = await fileToDataUrl(file);
-    setPhotoUrl(url);
+    setPhotoError("");
+    try {
+      const url = await resizeImage(file);
+      setPhotoUrl(url);
+    } catch (err) {
+      setPhotoError(err?.message || "Couldn't process that photo — try a different one.");
+    }
   };
 
   const save = async () => {
     setSaving(true);
     setError("");
-    const { error } = await supabase
-      .from("players")
-      .update({ ...form, photo_url: photoUrl })
-      .eq("id", player.id);
-    setSaving(false);
-    if (error) {
-      setError(error.message);
-      return;
+    try {
+      const { error } = await supabase
+        .from("players")
+        .update({ ...form, photo_url: photoUrl })
+        .eq("id", player.id);
+      if (error) {
+        setError(error.message);
+        return;
+      }
+      onSaved({ ...player, ...form, photo_url: photoUrl });
+    } catch (err) {
+      setError(err?.message || "Something went wrong saving — try again.");
+    } finally {
+      setSaving(false);
     }
-    onSaved({ ...player, ...form, photo_url: photoUrl });
   };
 
   const remove = async () => {
@@ -609,6 +653,7 @@ function PlayerDetail({ player, onBack, onSaved, onDeleted }) {
           </div>
           <input type="file" accept="image/*" className="hidden" onChange={handlePhoto} />
         </label>
+        {photoError && <p className="text-sm mt-2" style={{ color: "#f28f8a" }}>{photoError}</p>}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
