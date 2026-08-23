@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { Shield, LogOut, Users, ArrowLeft } from "lucide-react";
 import { supabase } from "../lib/supabaseClient.js";
+
+function toDateString(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 import MatchDayView from "./MatchDay.jsx";
 import DocumentsView from "./Documents.jsx";
 import TrainingSessionView, { Quadrant } from "./TrainingSession.jsx";
@@ -369,6 +376,7 @@ function ParentCalendar({ team, ownChildIds }) {
   const [events, setEvents] = useState([]);
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState("upcoming"); // "upcoming" | "previous"
 
   useEffect(() => {
     setLoading(true);
@@ -382,20 +390,52 @@ function ParentCalendar({ team, ownChildIds }) {
     });
   }, [team.id]);
 
+  const todayStr = toDateString(new Date());
+  const upcomingEvents = events.filter((e) => e.date >= todayStr);
+  const previousEvents = events.filter((e) => e.date < todayStr).slice().sort((a, b) => b.date.localeCompare(a.date));
+
+  if (view === "previous") {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <button className="text-sm flex items-center gap-1 mb-6" style={{ color: "var(--muted)" }} onClick={() => setView("upcoming")}>
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to calendar
+        </button>
+        <h1 className="font-display text-2xl tracking-wide mb-2">Previous Events</h1>
+        <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+          Matches and training move here automatically once their date has passed.
+        </p>
+        {loading ? (
+          <p style={{ color: "var(--muted)" }}>Loading…</p>
+        ) : previousEvents.length === 0 ? (
+          <div className="glass-panel p-10 text-center" style={{ color: "var(--muted)" }}>No past events yet.</div>
+        ) : (
+          <div className="space-y-3">
+            {previousEvents.map((ev) => (
+              <ParentEventCard key={ev.id} event={ev} players={players} ownChildIds={ownChildIds} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="font-display text-2xl tracking-wide mb-2">Calendar</h1>
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <h1 className="font-display text-2xl tracking-wide">Calendar</h1>
+        <button className="btn-ghost px-4 py-2 rounded-lg text-sm" onClick={() => setView("previous")}>Previous</button>
+      </div>
       <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
         You can see the whole team's schedule — tap your own child's RSVP to update it.
       </p>
 
       {loading ? (
         <p style={{ color: "var(--muted)" }}>Loading…</p>
-      ) : events.length === 0 ? (
-        <div className="glass-panel p-10 text-center" style={{ color: "var(--muted)" }}>No events on the calendar yet.</div>
+      ) : upcomingEvents.length === 0 ? (
+        <div className="glass-panel p-10 text-center" style={{ color: "var(--muted)" }}>No upcoming events on the calendar yet.</div>
       ) : (
         <div className="space-y-3">
-          {events.map((ev) => (
+          {upcomingEvents.map((ev) => (
             <ParentEventCard key={ev.id} event={ev} players={players} ownChildIds={ownChildIds} />
           ))}
         </div>
