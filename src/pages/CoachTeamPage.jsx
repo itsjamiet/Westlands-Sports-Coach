@@ -801,16 +801,45 @@ function EventFields({ form, setForm }) {
   );
 }
 
+function generateRecurringDates(startDateStr, interval) {
+  const start = new Date(startDateStr + "T00:00:00");
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 3);
+
+  const dates = [];
+  let current = new Date(start);
+  let guard = 0;
+  while (current <= end && guard < 60) {
+    dates.push(current.toISOString().slice(0, 10));
+    if (interval === "weekly") current.setDate(current.getDate() + 7);
+    else if (interval === "biweekly") current.setDate(current.getDate() + 14);
+    else if (interval === "monthly") current.setMonth(current.getMonth() + 1);
+    else break;
+    guard++;
+  }
+  return dates;
+}
+
 function EventForm({ teamId, onCreated, onCancel }) {
-  const [form, setForm] = useState({ type: "training", title: "", date: "", time: "", location: "", opponent: "", notes: "", home_color: null, away_color: null });
+  const [form, setForm] = useState({ type: "training", title: "", date: "", time: "", location: "", opponent: "", notes: "", home_color: null, away_color: null, recurrence: "none" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const previewDates = form.type === "training" && form.recurrence !== "none" && form.date
+    ? generateRecurringDates(form.date, form.recurrence)
+    : null;
 
   const save = async () => {
     if (!form.date) return;
     setSaving(true);
     setError("");
-    const { data, error } = await supabase.from("calendar_events").insert({ team_id: teamId, ...form }).select().single();
+    const { recurrence, ...eventFields } = form;
+
+    const rows = form.type === "training" && recurrence !== "none"
+      ? generateRecurringDates(form.date, recurrence).map((date) => ({ team_id: teamId, ...eventFields, date }))
+      : [{ team_id: teamId, ...eventFields }];
+
+    const { data, error } = await supabase.from("calendar_events").insert(rows).select();
     setSaving(false);
     if (error) {
       setError(error.message);
@@ -822,6 +851,24 @@ function EventForm({ teamId, onCreated, onCancel }) {
   return (
     <div className="glass-panel p-5 mb-6 space-y-3">
       <EventFields form={form} setForm={setForm} />
+
+      {form.type === "training" && (
+        <div>
+          <label className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>Repeats</label>
+          <select className="input-dark w-full mt-1" value={form.recurrence} onChange={(e) => setForm({ ...form, recurrence: e.target.value })}>
+            <option value="none">Does not repeat</option>
+            <option value="weekly">Weekly</option>
+            <option value="biweekly">Every 2 weeks</option>
+            <option value="monthly">Monthly</option>
+          </select>
+          {previewDates && (
+            <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+              Creates {previewDates.length} sessions, rolling 3 months ahead from the date above.
+            </p>
+          )}
+        </div>
+      )}
+
       {error && <p className="text-sm" style={{ color: "#f28f8a" }}>{error}</p>}
       <div className="flex gap-2">
         <button className="btn-accent px-4 py-2 rounded-lg text-sm" onClick={save} disabled={saving || !form.date}>
@@ -932,9 +979,26 @@ function EventCard({ event, players, editable, ownChildIds, onDeleted, onUpdated
               </span>
             )}
           </div>
-          <div className="font-display text-lg tracking-wide">
-            {event.title || (event.type === "match" ? `vs ${event.opponent || "TBC"}` : "Training session")}
-          </div>
+          {event.type === "match" ? (
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span
+                className="font-display"
+                style={{
+                  fontSize: "1.6rem",
+                  fontWeight: 800,
+                  background: "linear-gradient(180deg, #ffffff 0%, var(--accent) 55%, var(--accent-dark) 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.35))",
+                }}
+              >
+                Match vs {event.opponent || "TBC"}
+              </span>
+              {event.title && <span className="font-display text-base" style={{ color: "var(--muted)" }}>- {event.title}</span>}
+            </div>
+          ) : (
+            <div className="font-display text-lg tracking-wide">{event.title || "Training session"}</div>
+          )}
           <div className="text-xs mt-1 flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: "var(--muted)" }}>
             <span>{event.date}{event.time ? ` · ${event.time}` : ""}</span>
             {event.location && (
@@ -1057,7 +1121,7 @@ function TeamCalendar({ team, editable, ownChildIds }) {
       {showForm && (
         <EventForm
           teamId={team.id}
-          onCreated={(ev) => { setEvents((e) => [...e, ev].sort((a, b) => a.date.localeCompare(b.date))); setShowForm(false); }}
+          onCreated={(newEvents) => { setEvents((e) => [...e, ...newEvents].sort((a, b) => a.date.localeCompare(b.date))); setShowForm(false); }}
           onCancel={() => setShowForm(false)}
         />
       )}
