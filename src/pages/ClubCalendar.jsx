@@ -4,6 +4,18 @@ import { supabase } from "../lib/supabaseClient.js";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+function KitIcon({ color, size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color || "#888"} stroke="rgba(255,255,255,0.6)" strokeWidth="0.6">
+      <path d="M8 2.5 L2 6 L4.5 10 L7 8.3 V21 H17 V8.3 L19.5 10 L22 6 L16 2.5 C15 4 13.6 5 12 5 C10.4 5 9 4 8 2.5 Z" />
+    </svg>
+  );
+}
+
+function mapLink(location) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
+}
+
 function ClubCalendarDay({ dateStr, teams, onBack }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -53,13 +65,28 @@ function ClubCalendarDay({ dateStr, teams, onBack }) {
                 >
                   {ev.type === "match" ? "Match" : "Training"}
                 </span>
+                {ev.type === "match" && (ev.home_color || ev.away_color) && (
+                  <span className="flex items-center gap-1">
+                    {ev.home_color && <KitIcon color={ev.home_color} />}
+                    {ev.away_color && <KitIcon color={ev.away_color} />}
+                  </span>
+                )}
               </div>
               <div className="font-display text-lg tracking-wide">
                 {ev.title || (ev.type === "match" ? `vs ${ev.opponent || "TBC"}` : "Training session")}
               </div>
               <div className="text-xs mt-1 flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: "var(--muted)" }}>
                 {ev.time && <span>{ev.time}</span>}
-                {ev.location && <span>{ev.location}</span>}
+                {ev.location && (
+                  <a
+                    href={mapLink(ev.location)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "var(--accent)", textDecoration: "underline" }}
+                  >
+                    {ev.location}
+                  </a>
+                )}
               </div>
               {ev.notes && <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>{ev.notes}</p>}
             </div>
@@ -174,4 +201,5 @@ export default function ClubCalendarTab({ teams }) {
     </div>
   );
 }
+
 
