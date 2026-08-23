@@ -295,6 +295,11 @@ function ParentEventCard({ event, players, ownChildIds }) {
             >
               Match vs {event.opponent || "TBC"}
             </span>
+            {(event.our_score !== null && event.our_score !== undefined && event.their_score !== null && event.their_score !== undefined) && (
+              <span className="font-display font-mono" style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--gold-light)" }}>
+                {event.our_score} - {event.their_score}
+              </span>
+            )}
             {event.title && <span className="font-display text-base" style={{ color: "var(--muted)" }}>- {event.title}</span>}
           </div>
         ) : (
@@ -510,7 +515,12 @@ export default function ParentDashboard({ profile, onSignOut }) {
         <div className="flex items-center gap-3">
           <Shield className="w-5 h-5" style={{ color: "var(--accent)" }} />
           {teamOptions.length > 1 ? (
-            <select className="input-dark text-sm py-1.5" value={activeTeamId} onChange={(e) => { setActiveTeamId(e.target.value); setOpenPlayer(null); }}>
+            <select
+              className="text-sm py-1.5 px-2 rounded-lg"
+              style={{ background: "#2E4E80", color: "white", border: "1px solid rgba(255,255,255,0.14)" }}
+              value={activeTeamId}
+              onChange={(e) => { setActiveTeamId(e.target.value); setOpenPlayer(null); }}
+            >
               {teamOptions.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           ) : (
